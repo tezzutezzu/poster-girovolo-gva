@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Poster dei voli GVA 2026</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.css"
+    integrity="sha256-Q8HYhrX98KrE5xNb1vhLgj2fSCg6ZIASZl+b5SwBOJ8=" crossorigin="">
+  <style>
+    :root {
+      --ink: #17202a;
+      --muted: #68737d;
+      --accent: #dc3d42;
+      --traccia: #FFF700;
+      --paper: #ffffff;
+      --line: #d9dee3;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #eef1f3;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .barra-strumenti {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 16px 20px;
+      background: var(--paper);
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0 12px 0 0;
+      font-size: 1.15rem;
+      font-weight: 750;
+    }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      min-height: 38px;
+      padding: 8px 13px;
+      border: 1px solid #b7c0c8;
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .barra-strumenti label.etichetta-campo {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .percorso { color: var(--muted); font-size: .85rem; }
+
+    .percorso code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #eef1f3;
+      font-size: .9em;
+    }
+
+    button:hover { border-color: var(--accent); }
+
+    .barra-strumenti input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    button.principale { border-color: var(--accent); background: var(--accent); color: white; }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+
+    #stato {
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .poster {
+      width: min(100%, 1200px);
+      margin: 24px auto;
+      padding: 18px;
+      background: var(--paper);
+      box-shadow: 0 4px 24px #18212b18;
+    }
+
+    .poster + .poster { margin-top: 32px; }
+
+    .intestazione-poster {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 20px;
+      margin: 0 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--ink);
+    }
+
+    .intestazione-poster h2 { margin: 0; font-size: clamp(1.1rem, 2vw, 1.65rem); }
+    .intestazione-poster p { margin: 0; color: var(--muted); font-size: .85rem; }
+
+    .griglia {
+      display: grid;
+      /* Colonne e forma delle celle arrivano dalle costanti dello script. */
+      grid-template-columns: repeat(var(--colonne, 3), minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .scheda {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .scheda.vuota {
+      background: #fbfcfc;
+    }
+
+    .scheda.errore {
+      display: grid;
+      place-items: center;
+      padding: 10px;
+      color: #8d2b2f;
+      font-size: .7rem;
+      text-align: center;
+      background: #fdf2f2;
+    }
+
+    .istantanea {
+      display: block;
+      width: 100%;
+      aspect-ratio: var(--rapporto-mappa, 16 / 9);
+      object-fit: cover;
+      background: #e6eaed;
+    }
+
+    /* La data sta sotto la mappa, non sopra. */
+    .didascalia {
+      padding: 4px 6px;
+      color: var(--ink);
+      font-size: .6rem;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.3;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .nota {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: .72rem;
+    }
+
+    .nota .chiave { display: inline-flex; align-items: center; gap: 7px; }
+
+    .nota i {
+      display: inline-block;
+      width: 24px;
+      height: 5px;
+      border-radius: 4px;
+      background: var(--traccia);
+      box-shadow: 0 0 0 1px #1a1a1a;
+    }
+
+    /* Area fuori schermo dove le mappe vengono disegnate una alla volta. */
+    .area-rendering {
+      position: fixed;
+      top: 0;
+      left: -20000px;
+      pointer-events: none;
+    }
+
+    @media (max-width: 720px) {
+      .poster { margin: 0; padding: 10px; }
+      .griglia { gap: 4px; }
+      .didascalia { padding: 2px 3px; font-size: .48rem; }
+      .nota { font-size: .55rem; }
+    }
+
+    @media print {
+      body { background: white; }
+      .barra-strumenti { display: none; }
+      .poster { width: auto; margin: 0; padding: 0; box-shadow: none; }
+      .poster + .poster { break-before: page; margin-top: 0; }
+      .griglia { gap: var(--gap-stampa, 3mm); }
+      .scheda { break-inside: avoid; }
+
+      /* Altezze fisse: la lunghezza del foglio si calcola da queste, quindi non
+         devono dipendere dal contenuto. */
+      .intestazione-poster {
+        height: var(--testata-stampa, 20mm);
+        margin: 0;
+        box-sizing: border-box;
+        overflow: hidden;
+      }
+
+      .nota {
+        height: var(--piede-stampa, 10mm);
+        margin: 0;
+        box-sizing: border-box;
+      }
+
+      .didascalia {
+        display: flex;
+        align-items: center;
+        height: var(--didascalia-stampa, 6mm);
+        padding: 0 1.5mm;
+        box-sizing: border-box;
+        font-size: 7pt;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="barra-strumenti">
+    <h1>Poster dei voli GVA 2026</h1>
+    <button id="pulsante-ricarica" type="button">Ricarica i KML</button>
+    <span class="percorso">cartella <code>./kml</code></span>
+    <label class="etichetta-campo" for="interruttore-etichette">
+      <input id="interruttore-etichette" type="checkbox" checked>
+      Etichette città
+    </label>
+    <button id="pulsante-stampa" class="principale" type="button" disabled>Stampa / salva PDF</button>
+    <span id="stato">Lettura dei file KML…</span>
+  </div>
+
+  <main class="poster">
+    <header class="intestazione-poster">
+      <h2>Tracciati voli GVA 2026</h2>
+      <p id="conteggio-voli">0 voli</p>
+    </header>
+    <section id="griglia" class="griglia" aria-live="polite"></section>
+    <div class="nota">
+      <span class="chiave"><i></i> Traccia del volo registrata</span>
+      <span class="credito" data-credito></span>
+    </div>
+  </main>
+
+  <script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js"
+    integrity="sha256-InYlnHvY7GMswFURXv2tU3g7fabnEE+tTEg36kZ9kI0=" crossorigin=""></script>
+  <script>
+    // L'attribuzione è obbligatoria per i provider usati qui.
+    // Impostare a false solo con un provider di mappe che non richiede attribuzione.
+    const MOSTRA_CREDITO_MAPPE = true;
+
+    // -------------------------------------------------------------------------
+    // Impaginazione e stampa su rotolo
+    // -------------------------------------------------------------------------
+    // Il rotolo decide la larghezza del foglio; la lunghezza segue il contenuto,
+    // quindi le mappe possono essere grandi quanto serve. Cambiando solo
+    // LARGHEZZA_ROTOLO_MM si adattano celle, risoluzione di rendering e pagina.
+    const LARGHEZZA_ROTOLO_MM = 610;      // rotolo da 24 pollici, il più diffuso
+    const MARGINE_PAGINA_MM = 10;
+    const COLONNE = 4;
+    const RIGHE = 4;
+    const GAP_MM = 3;                     // spazio fra le celle in stampa
+    const RAPPORTO_MAPPA = 1.618//16 / 9;        // larghezza / altezza di ogni mappa
+    const DPI_STAMPA = 300;
+
+    // Altezze fisse in stampa: servono a calcolare la lunghezza esatta del foglio,
+    // perché una riga in più o in meno significa un foglio bianco in fondo.
+    const ALTEZZA_TESTATA_MM = 20;
+    const ALTEZZA_PIEDE_MM = 10;
+    const ALTEZZA_DIDASCALIA_MM = 6;
+    const BORDO_SCHEDA_MM = 2 * 25.4 / 96;   // i 2 px di bordo attorno a ogni cella
+
+    const LARGHEZZA_CONTENUTO_MM = LARGHEZZA_ROTOLO_MM - 2 * MARGINE_PAGINA_MM;
+    const LARGHEZZA_MAPPA_MM = (LARGHEZZA_CONTENUTO_MM - (COLONNE - 1) * GAP_MM) / COLONNE;
+    const ALTEZZA_MAPPA_MM = (LARGHEZZA_MAPPA_MM - BORDO_SCHEDA_MM) / RAPPORTO_MAPPA;
+    const ALTEZZA_RIGA_MM = ALTEZZA_MAPPA_MM + BORDO_SCHEDA_MM + ALTEZZA_DIDASCALIA_MM;
+    const LUNGHEZZA_PAGINA_MM = 2 * MARGINE_PAGINA_MM + ALTEZZA_TESTATA_MM + ALTEZZA_PIEDE_MM +
+      RIGHE * ALTEZZA_RIGA_MM + (RIGHE - 1) * GAP_MM;
+
+    const CELLE_PER_PAGINA = COLONNE * RIGHE;
+
+    // Ogni mappa è disegnata con lo stesso rapporto della cella stampata, alla
+    // risoluzione che serve per DPI_STAMPA: niente ritagli e niente pixel molli.
+    const LARGHEZZA_RENDER = Math.round(LARGHEZZA_MAPPA_MM / 25.4 * DPI_STAMPA);
+    const ALTEZZA_RENDER = Math.round(LARGHEZZA_RENDER / RAPPORTO_MAPPA);
+
+    // Le misure che servono al CSS: griglia, forma delle celle, altezze di stampa
+    // e formato della pagina. Un'unica origine per CSS e JavaScript.
+    const radice = document.documentElement.style;
+    radice.setProperty("--colonne", COLONNE);
+    radice.setProperty("--rapporto-mappa", RAPPORTO_MAPPA);
+    radice.setProperty("--gap-stampa", `${GAP_MM}mm`);
+    radice.setProperty("--testata-stampa", `${ALTEZZA_TESTATA_MM}mm`);
+    radice.setProperty("--piede-stampa", `${ALTEZZA_PIEDE_MM}mm`);
+    radice.setProperty("--didascalia-stampa", `${ALTEZZA_DIDASCALIA_MM}mm`);
+
+    // Il formato del foglio: largo quanto il rotolo, lungo quanto il poster.
+    const foglio = document.createElement("style");
+    foglio.textContent = `@page { size: ${LARGHEZZA_ROTOLO_MM}mm ${Math.ceil(LUNGHEZZA_PAGINA_MM)}mm; margin: ${MARGINE_PAGINA_MM}mm; }`;
+    document.head.append(foglio);
+
+    // Tetto di zoom riferito al rendering a 800 px: crescendo la risoluzione
+    // il tetto sale in proporzione, altrimenti i voli più corti verrebbero
+    // rimpicciolti nella scheda invece che disegnati più in dettaglio.
+    const ZOOM_MASSIMO_BASE = 20;
+    const ZOOM_MASSIMO = ZOOM_MASSIMO_BASE + Math.log2(ALTEZZA_RENDER / 800);
+
+    // Quante mappe disegnare contemporaneamente. Ognuna occupa un contesto WebGL,
+    // che il browser limita a circa 16 per pagina: alzarlo troppo non conviene.
+    const MAPPE_IN_PARALLELO = 4;
+
+    // Spessore del tracciato sul rendering a 800 px. Il contorno scuro serve a far
+    // risaltare il giallo sia sulle mappe chiare sia sulle immagini satellitari.
+    const SPESSORE_TRACCIA = 10;
+    const SPESSORE_CONTORNO = 12;
+    const COLORE_CONTORNO = "#FFF700";
+
+    // Inquadratura attorno alla traccia: valori più alti allargano la vista.
+    const MARGINE_TRACCIA = 8;
+    const LIVELLI_ZOOM_INDIETRO = 0.1;
+
+    // I file KML stanno sempre in questa cartella, accanto alla pagina.
+    const CARTELLA_KML = "./kml";
+
+    // Elenco di riserva: serve solo se il server non mostra l'indice della cartella
+    // (per esempio su GitHub Pages, che non genera elenchi).
+    const FILE_KML = [
+      "1b 050726.kml", "2 100726.kml", "3 110726.kml", "4 240726.kml", "5 260726.kml",
+      "6 310726.kml", "7 020826.kml", "8 040826.kml", "9 080826.kml", "10 120826.kml",
+      "11 040926.kml", "12 050926.kml", "13 060926.kml", "14 110926.kml", "15 120926.kml",
+      "16 130926.kml"
+    ];
+
+    const FUSO_ORARIO = "Europe/Rome";
+    const MESI_ITALIANI = {
+      jan: "Gennaio", feb: "Febbraio", mar: "Marzo", apr: "Aprile", mag: "Maggio", jun: "Giugno",
+      jul: "Luglio", aug: "Agosto", sep: "Settembre", oct: "Ottobre", nov: "Novembre", dec: "Dicembre"
+    };
+
+    // Immagini: raccolta Esri fermata al rilascio del 2014-02-20, il più vecchio
+    // pubblicato. L'elenco dei rilasci con le date è in
+    //   https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json
+    // Sulla zona volata quel rilascio contiene una ripresa dell'11 marzo 2011 a 0,3 m.
+    const RILASCIO_WAYBACK = "10";
+    const DATA_WAYBACK = "2014-02-20";
+    const RIPRESA_WAYBACK = "11/03/2011";
+
+    const RASTER_WAYBACK = {
+      type: "raster",
+      tiles: [`https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/${RILASCIO_WAYBACK}/{z}/{y}/{x}`],
+      tileSize: 256,
+      maxzoom: 19
+    };
+
+    const CREDITO = `Immagini: © Esri, Maxar, Earthstar Geographics (Wayback ${DATA_WAYBACK}, ripresa ${RIPRESA_WAYBACK})`;
+
+    // Le etichette dei luoghi sono vettoriali: restano nitide alla risoluzione di
+    // stampa. I nomi delle strade vengono scartati (vedi SORGENTI_SENZA_TESTO).
+    const STILE_ETICHETTE = "https://tiles.openfreemap.org/styles/liberty";
+
+    // Dimensione del testo, uguale per tutti i toponimi: 22 px è la base riferita
+    // al rendering a 800 px, 1.5 l'ingrandimento.
+    const SCALA_ETICHETTE = 1.5;
+    const DIMENSIONE_ETICHETTE = 22 * SCALA_ETICHETTE;
+
+    // Aspetto delle etichette dei luoghi: testo bianco in grassetto con contorno
+    // nero, lo schema più leggibile sia sulle immagini satellitari sia sulle mappe
+    // chiare. "Noto Sans Bold" è l'unico grassetto servito dal provider dei glifi.
+    const FONT_ETICHETTE = ["Noto Sans Bold"];
+    const COLORE_ETICHETTE = "#ffffff";
+    const COLORE_CONTORNO_ETICHETTE = "#000000";
+    const SPESSORE_CONTORNO_ETICHETTE = 1.5;
+
+    let cacheEtichette = null;
+    let caricamentoEtichette = null;
+
+    const pulsanteRicarica = document.querySelector("#pulsante-ricarica");
+    const interruttoreEtichette = document.querySelector("#interruttore-etichette");
+    const grigliaIniziale = document.querySelector("#griglia");
+    const stato = document.querySelector("#stato");
+    const pulsanteStampa = document.querySelector("#pulsante-stampa");
+    const conteggioVoli = document.querySelector("#conteggio-voli");
+
+    let voliCorrenti = [];
+    let renderingInCorso = false;
+    let renderRichiesto = false;
+    let caricamentoInCorso = false;
+
+    aggiornaCredito();
+
+    pulsanteRicarica.addEventListener("click", () => caricaCartella());
+
+    async function caricaCartella() {
+      if (caricamentoInCorso) return;
+      caricamentoInCorso = true;
+      pulsanteRicarica.disabled = true;
+
+      try {
+        stato.textContent = `Elenco dei file in ${CARTELLA_KML}…`;
+        const nomi = await elencaKml();
+        if (!nomi.length) {
+          stato.textContent = `Nessun file KML in ${CARTELLA_KML}.`;
+          return;
+        }
+
+        stato.textContent = `Lettura di ${nomi.length} file KML…`;
+        const voli = [];
+        const errori = [];
+
+        for (const nome of nomi) {
+          try {
+            voli.push(analizzaKml(await leggiKml(nome)));
+          } catch (errore) {
+            console.error(`Impossibile leggere ${nome}`, errore);
+            errori.push(`${nome}: ${errore.message}`);
+          }
+        }
+
+        if (!voli.length) {
+          stato.textContent = `Nessun volo leggibile in ${CARTELLA_KML} · ${errori.join(" | ")}`;
+          return;
+        }
+
+        voliCorrenti = voli;
+        conteggioVoli.textContent = `${voli.length} ${voli.length === 1 ? "volo" : "voli"}`;
+        if (errori.length) stato.textContent = `Errori: ${errori.join(" | ")}`;
+
+        await rendiPoster();
+      } finally {
+        caricamentoInCorso = false;
+        pulsanteRicarica.disabled = false;
+      }
+    }
+
+    // L'elenco arriva dall'indice della cartella, quando il server lo pubblica;
+    // altrimenti si usa FILE_KML.
+    async function elencaKml() {
+      try {
+        const risposta = await fetch(`${CARTELLA_KML}/`);
+        if (!risposta.ok) throw new Error(`HTTP ${risposta.status}`);
+
+        const pagina = new DOMParser().parseFromString(await risposta.text(), "text/html");
+        const nomi = [...pagina.querySelectorAll("a")]
+          .map(ancora => ancora.getAttribute("href") ?? "")
+          .filter(indirizzo => /\.kml$/i.test(indirizzo))
+          .map(indirizzo => decodeURIComponent(indirizzo.replace(/^.*\//, "")));
+
+        if (nomi.length) return nomi.sort((a, b) => a.localeCompare(b, "it", { numeric: true, sensitivity: "base" }));
+      } catch (errore) {
+        console.warn(`Indice di ${CARTELLA_KML} non disponibile, uso FILE_KML:`, errore.message);
+      }
+
+      return FILE_KML.slice();
+    }
+
+    async function leggiKml(nome) {
+      const risposta = await fetch(`${CARTELLA_KML}/${encodeURIComponent(nome)}`);
+      if (!risposta.ok) throw new Error(`HTTP ${risposta.status}`);
+      return risposta.text();
+    }
+
+    interruttoreEtichette.addEventListener("change", async () => {
+      aggiornaCredito();
+      if (voliCorrenti.length) await rendiPoster();
+    });
+
+    pulsanteStampa.addEventListener("click", () => window.print());
+
+    // Caricamento automatico all'apertura: la cartella dei KML è fissa.
+    caricaCartella();
+
+    async function rendiPoster() {
+      // Cambiare stile mentre un disegno è in corso non deve essere ignorato:
+      // la richiesta viene messa in coda e riparte appena il poster è finito.
+      if (renderingInCorso) {
+        renderRichiesto = true;
+        return;
+      }
+      renderingInCorso = true;
+      pulsanteStampa.disabled = true;
+
+      try {
+        svuotaPoster();
+        const griglie = creaGriglie(voliCorrenti.length);
+        const schede = voliCorrenti.map((volo, indice) =>
+          creaScheda(volo, griglie[Math.floor(indice / CELLE_PER_PAGINA)]));
+
+        // Le mappe vengono disegnate più di una alla volta: il costo di ognuna è
+        // quasi tutto attesa di rete, quindi in parallelo il tempo totale cala di
+        // oltre tre volte. Misurato su 4 mappe a 1600 px: 3,1 s in sequenza,
+        // 1,0 s con quattro in parallelo.
+        let completate = 0;
+        let prossimo = 0;
+        const operai = Array.from(
+          { length: Math.min(MAPPE_IN_PARALLELO, voliCorrenti.length) },
+          async () => {
+            while (prossimo < voliCorrenti.length) {
+              const indice = prossimo;
+              prossimo += 1;
+              const scheda = schede[indice];
+
+              try {
+                scheda.querySelector(".istantanea").src = await rendiMappa(voliCorrenti[indice]);
+              } catch (errore) {
+                console.error(`Impossibile disegnare ${voliCorrenti[indice].data}`, errore);
+                scheda.classList.add("errore");
+                scheda.querySelector(".istantanea")?.remove();
+                scheda.prepend(document.createTextNode(`Mappa non disponibile: ${errore.message}`));
+              }
+
+              completate += 1;
+              stato.textContent = `Disegno ${completate} di ${voliCorrenti.length}…`;
+            }
+          }
+        );
+        await Promise.all(operai);
+
+        griglie.forEach(griglia => {
+          while (griglia.children.length < CELLE_PER_PAGINA) aggiungiSchedaVuota(griglia);
+        });
+
+        stato.textContent = `Pronti ${voliCorrenti.length} ${voliCorrenti.length === 1 ? "volo" : "voli"}.`;
+        pulsanteStampa.disabled = voliCorrenti.length === 0;
+      } finally {
+        renderingInCorso = false;
+      }
+
+      if (renderRichiesto) {
+        renderRichiesto = false;
+        await rendiPoster();
+      }
+    }
+
+    async function rendiMappa(volo) {
+      const coordinate = volo.punti.map(([lat, lon]) => [lon, lat]);
+      const contenitore = document.createElement("div");
+      contenitore.className = "area-rendering";
+      contenitore.style.width = `${LARGHEZZA_RENDER}px`;
+      contenitore.style.height = `${ALTEZZA_RENDER}px`;
+      document.body.append(contenitore);
+
+      // Sopra le immagini satellitari le etichette vanno aggiunte a parte.
+      if (etichetteVisibili()) {
+        try {
+          await caricaEtichetteVettoriali();
+        } catch (errore) {
+          console.warn("Etichette dei luoghi non disponibili:", errore);
+        }
+      }
+
+      const mappa = new maplibregl.Map({
+        container: contenitore,
+        style: stileRaster(),
+        center: coordinate[0],
+        zoom: 9,
+        interactive: false,
+        attributionControl: false,
+        preserveDrawingBuffer: true,
+        fadeDuration: 0,
+        pixelRatio: 1
+      });
+
+      // Spiega il motivo quando la mappa non si carica, per esempio se le tile
+      // vengono rifiutate o bloccate.
+      let ultimoErrore = null;
+      mappa.on("error", evento => {
+        ultimoErrore = evento.error?.message || String(evento.error);
+        console.warn("MapLibre:", ultimoErrore);
+      });
+
+      // L'inquadratura viene impostata subito, prima che lo stile carichi: così le
+      // tile richieste sono fin da subito quelle definitive, invece di scaricare la
+      // vista iniziale per poi buttarla. Misurato: da 85 a 36 tile per mappa, a
+      // parità di inquadratura.
+      const limiti = coordinate.reduce(
+        (accumulatore, punto) => accumulatore.extend(punto),
+        new maplibregl.LngLatBounds(coordinate[0], coordinate[0])
+      );
+      mappa.fitBounds(limiti, { padding: MARGINE_TRACCIA, maxZoom: ZOOM_MASSIMO, duration: 0 });
+      // Allarga l'inquadratura di qualche frazione di livello, così la traccia
+      // resta intera ma con un po' di respiro attorno.
+      mappa.setZoom(mappa.getZoom() - LIVELLI_ZOOM_INDIETRO, { duration: 0 });
+
+      try {
+        await new Promise((risolvi, rifiuta) => {
+          const scadenza = setTimeout(
+            () => rifiuta(new Error(ultimoErrore ? `timeout di caricamento (${ultimoErrore})` : "timeout di caricamento")),
+            25000
+          );
+          mappa.once("load", () => { clearTimeout(scadenza); risolvi(); });
+        });
+
+        applicaEtichette(mappa);
+        aggiungiTraccia(mappa, coordinate);
+        portaTracciaSottoLeEtichette(mappa);
+
+        await attendiRender(mappa);
+        return mappa.getCanvas().toDataURL("image/png");
+      } finally {
+        // Libera subito il contesto WebGL: il browser ne consente pochi per pagina.
+        mappa.remove();
+        contenitore.remove();
+      }
+    }
+
+
+    function stileRaster() {
+      const sorgenti = { base: RASTER_WAYBACK };
+      const livelli = [{ id: "base", type: "raster", source: "base" }];
+      const stile = { version: 8, sources: sorgenti, layers: livelli };
+
+      if (etichetteVisibili() && cacheEtichette) {
+        Object.assign(sorgenti, cacheEtichette.sources);
+        stile.sprite = cacheEtichette.sprite;
+        stile.glyphs = cacheEtichette.glyphs;
+        // Copia profonda: le mappe condividono la stessa cache e modificare il
+        // layout di una scheda non deve influenzare le altre.
+        cacheEtichette.layers.forEach(livello => livelli.push(structuredClone(livello)));
+      }
+
+      return stile;
+    }
+
+    async function caricaEtichetteVettoriali() {
+      if (cacheEtichette) return cacheEtichette;
+
+      // Con più mappe in parallelo la richiesta parte una sola volta.
+      if (!caricamentoEtichette) {
+        caricamentoEtichette = scaricaEtichetteVettoriali()
+          .then(risultato => { cacheEtichette = risultato; return risultato; })
+          .finally(() => { caricamentoEtichette = null; });
+      }
+      return caricamentoEtichette;
+    }
+
+    // Livelli dai quali non vogliamo testo. transportation_name contiene i nomi
+    // delle strade e i numeri delle strade: su un poster di voli sono solo rumore.
+    const SORGENTI_SENZA_TESTO = ["transportation_name"];
+
+    async function scaricaEtichetteVettoriali() {
+      const risposta = await fetch(STILE_ETICHETTE);
+      if (!risposta.ok) throw new Error("stile delle etichette non disponibile");
+      const stile = await risposta.json();
+
+      // Servono solo i livelli di testo e le sorgenti che usano.
+      const sorgentiUsate = new Set();
+      const livelli = stile.layers
+        .filter(livello => {
+          if (livello.type !== "symbol" || !livello.layout?.["text-field"]) return false;
+          if (SORGENTI_SENZA_TESTO.includes(livello["source-layer"])) return false;
+          sorgentiUsate.add(livello.source);
+          return true;
+        })
+        .map(livello => ({ ...livello, id: `eti-${livello.id}` }));
+
+      const sorgenti = {};
+      sorgentiUsate.forEach(nome => { sorgenti[nome] = stile.sources[nome]; });
+
+      return {
+        sprite: stile.sprite,
+        glyphs: stile.glyphs,
+        sources: sorgenti,
+        layers: livelli
+      };
+    }
+
+    // Va richiamata una sola volta per mappa.
+    function applicaEtichette(mappa) {
+      const visibili = etichetteVisibili();
+
+      mappa.getStyle().layers.forEach(livello => {
+        if (livello.type !== "symbol" || !livello.layout?.["text-field"]) return;
+
+        mappa.setLayoutProperty(livello.id, "text-size", DIMENSIONE_ETICHETTE);
+        mappa.setLayoutProperty(livello.id, "text-font", FONT_ETICHETTE);
+        mappa.setLayoutProperty(livello.id, "visibility", visibili ? "visible" : "none");
+        mappa.setPaintProperty(livello.id, "text-color", COLORE_ETICHETTE);
+        mappa.setPaintProperty(livello.id, "text-halo-color", COLORE_CONTORNO_ETICHETTE);
+        mappa.setPaintProperty(livello.id, "text-halo-width", SPESSORE_CONTORNO_ETICHETTE * SCALA_ETICHETTE);
+      });
+    }
+
+    function aggiungiTraccia(mappa, coordinate) {
+      // Il colore vive nel CSS (--traccia) così traccia e legenda restano allineate.
+      const coloreTraccia = getComputedStyle(document.documentElement)
+        .getPropertyValue("--traccia").trim();
+
+      mappa.addSource("traccia", {
+        type: "geojson",
+        data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coordinate } }
+      });
+      mappa.addLayer({
+        id: "traccia-bordo",
+        type: "line",
+        source: "traccia",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": COLORE_CONTORNO, "line-width": SPESSORE_CONTORNO, "line-opacity": .9 }
+      });
+      mappa.addLayer({
+        id: "traccia-linea",
+        type: "line",
+        source: "traccia",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": coloreTraccia, "line-width": SPESSORE_TRACCIA }
+      });
+      mappa.addSource("estremi", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: [
+            puntoEstremo(coordinate[0], "partenza"),
+            puntoEstremo(coordinate[coordinate.length - 1], "arrivo")
+          ]
+        }
+      });
+      mappa.addLayer({
+        id: "estremi",
+        type: "circle",
+        source: "estremi",
+        paint: {
+          "circle-radius": 4,
+          "circle-color": ["match", ["get", "tipo"], "partenza", "#ffffff", coloreTraccia],
+          "circle-stroke-color": COLORE_CONTORNO,
+          "circle-stroke-width": 1.5
+        }
+      });
+    }
+
+    // I nomi dei luoghi vanno letti sopra la traccia: spostando i layer della
+    // traccia appena prima del primo layer di testo, le etichette restano in cima.
+    function portaTracciaSottoLeEtichette(mappa) {
+      const primaEtichetta = mappa.getStyle().layers.find(
+        livello => livello.type === "symbol" && livello.layout?.["text-field"]
+      );
+      if (!primaEtichetta) return;
+
+      ["traccia-bordo", "traccia-linea", "estremi"].forEach(id => {
+        mappa.moveLayer(id, primaEtichetta.id);
+      });
+    }
+
+    function puntoEstremo(coordinata, tipo) {
+      return {
+        type: "Feature",
+        properties: { tipo },
+        geometry: { type: "Point", coordinates: coordinata }
+      };
+    }
+
+    async function attendiRender(mappa, timeoutMs = 25000) {
+      const inizio = Date.now();
+      while (Date.now() - inizio < timeoutMs) {
+        if (mappa.loaded() && mappa.areTilesLoaded() && mappa.isSourceLoaded("traccia")) break;
+        await new Promise(risolvi => setTimeout(risolvi, 100));
+      }
+      await new Promise(risolvi => requestAnimationFrame(() => requestAnimationFrame(risolvi)));
+    }
+
+    function etichetteVisibili() {
+      return interruttoreEtichette.checked;
+    }
+
+    function aggiornaCredito() {
+      document.querySelectorAll("[data-credito]").forEach(elemento => {
+        if (MOSTRA_CREDITO_MAPPE) elemento.textContent = CREDITO;
+        else elemento.remove();
+      });
+    }
+
+    function creaGriglie(numeroVoli) {
+      const numeroPagine = Math.max(1, Math.ceil(numeroVoli / CELLE_PER_PAGINA));
+      const griglie = [grigliaIniziale];
+      for (let pagina = 1; pagina < numeroPagine; pagina += 1) {
+        const poster = document.createElement("main");
+        poster.className = "poster";
+        poster.innerHTML = `<header class="intestazione-poster">
+            <h2>Tracciati voli GVA 2026</h2>
+          </header>
+          <section class="griglia"></section>
+        `;
+        document.body.append(poster);
+        griglie.push(poster.querySelector(".griglia"));
+      }
+      aggiornaCredito();
+      return griglie;
+    }
+
+    function creaScheda(volo, griglia) {
+      const scheda = document.createElement("article");
+      scheda.className = "scheda";
+      scheda.innerHTML = `<img class="istantanea" alt="Traccia del volo del ${escapizza(volo.data)}">
+        <div class="didascalia">${escapizza(volo.data)}</div>`;
+      griglia.append(scheda);
+      return scheda;
+    }
+
+    // Cella di riempimento per completare la griglia: resta bianca, senza testo,
+    // così sul poster stampato non compare nulla di provvisorio.
+    function aggiungiSchedaVuota(griglia) {
+      const scheda = document.createElement("article");
+      scheda.className = "scheda vuota";
+      scheda.setAttribute("aria-hidden", "true");
+      griglia.append(scheda);
+    }
+
+    function svuotaPoster() {
+      document.querySelectorAll(".poster:not(:first-of-type)").forEach(poster => poster.remove());
+      grigliaIniziale.replaceChildren();
+    }
+
+    function analizzaKml(sorgente) {
+      const xml = new DOMParser().parseFromString(sorgente, "application/xml");
+      if (xml.querySelector("parsererror")) throw new Error("XML non valido");
+
+      const punti = [...xml.getElementsByTagNameNS("http://www.google.com/kml/ext/2.2", "coord")]
+        .map(nodo => nodo.textContent.trim().split(/\s+/).map(Number))
+        .filter(punto => Number.isFinite(punto[0]) && Number.isFinite(punto[1]))
+        .map(([lon, lat]) => [lat, lon]);
+
+      if (punti.length < 2) {
+        const testoCoordinate = [...xml.getElementsByTagName("coordinates")]
+          .map(nodo => nodo.textContent.trim())
+          .join(" ");
+        punti.push(...testoCoordinate.split(/\s+/)
+          .map(valore => valore.split(",").map(Number))
+          .filter(punto => Number.isFinite(punto[0]) && Number.isFinite(punto[1]))
+          .map(([lon, lat]) => [lat, lon]));
+      }
+
+      if (punti.length < 2) throw new Error("nessun punto di traccia trovato");
+
+      const nomi = [...xml.getElementsByTagName("name")].map(nodo => nodo.textContent.trim());
+      const etichettaInizio = nomi.find(nome => /^Log Start:/i.test(nome));
+      const orari = [...xml.getElementsByTagName("when")].map(nodo => nodo.textContent.trim());
+
+      return {
+        data: dataDaEtichetta(etichettaInizio) || dataDaOrario(orari[0]),
+        punti
+      };
+    }
+
+    function dataDaEtichetta(etichetta) {
+      if (!etichetta) return null;
+      const corrispondenza = /(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})/.exec(etichetta);
+      if (!corrispondenza) return null;
+      const mese = MESI_ITALIANI[corrispondenza[2].toLowerCase()];
+      if (!mese) return null;
+      // Numero senza zero iniziale, mese per esteso, senza anno.
+      return `${Number(corrispondenza[1])} ${mese}`;
+    }
+
+    function dataDaOrario(valore) {
+      if (!valore) return "Data non disponibile";
+      const data = new Date(valore);
+      if (Number.isNaN(data.getTime())) return "Data non disponibile";
+      const parti = new Intl.DateTimeFormat("it-IT", {
+        timeZone: FUSO_ORARIO, day: "numeric", month: "long"
+      }).formatToParts(data).reduce((accumulatore, parte) => {
+        accumulatore[parte.type] = parte.value;
+        return accumulatore;
+      }, {});
+      const mese = parti.month.charAt(0).toUpperCase() + parti.month.slice(1);
+      return `${parti.day} ${mese}`;
+    }
+
+    function escapizza(valore) {
+      return valore.replace(/[&<>"']/g, carattere => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+      })[carattere]);
+    }
+  </script>
+</body>
+</html>
