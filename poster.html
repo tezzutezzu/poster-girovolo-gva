@@ -830,10 +830,14 @@
         .map(([lon, lat]) => [lat, lon]);
 
       if (punti.length < 2) {
-        const testoCoordinate = [...xml.getElementsByTagName("coordinates")]
-          .map(nodo => nodo.textContent.trim())
-          .join(" ");
-        punti.push(...testoCoordinate.split(/\s+/)
+        // Il blocco di coordinate più lungo è la traccia: gli altri sono le
+        // bandierine di partenza e arrivo, che non fanno parte del percorso.
+        const blocchi = [...xml.getElementsByTagName("coordinates")]
+          .map(nodo => nodo.textContent.trim().split(/\s+/).filter(Boolean))
+          .filter(valori => valori.length > 2)
+          .sort((a, b) => b.length - a.length);
+
+        punti.push(...(blocchi[0] ?? [])
           .map(valore => valore.split(",").map(Number))
           .filter(punto => Number.isFinite(punto[0]) && Number.isFinite(punto[1]))
           .map(([lon, lat]) => [lat, lon]));

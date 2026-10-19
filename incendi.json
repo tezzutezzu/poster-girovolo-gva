@@ -1,0 +1,101 @@
+{
+  "_istruzioni": [
+    "Segnalazioni di incendi reali a terra, una chiave per giorno (AAAA-MM-GG).",
+    "Ogni voce è un incendio: { \"nome\": \"...\", \"latitude\": 40.7005, \"longitude\": 16.3722, \"note\": \"...\" }.",
+    "latitude e longitude sono obbligatorie; nome e note si possono omettere.",
+    "Le segnalazioni compaiono sulla mappa quando si sceglie un volo dello stesso giorno.",
+    "Le voci qui sotto sono esempi: correggi le coordinate e il resto, o cancellale."
+  ],
+  "2026-07-05": [
+    
+  ],
+  "2026-07-10": [{
+    "latitude": 40.54218613357954,
+    "longitude": 16.22572164750665
+  }],
+  "2026-07-11": [],
+  "2026-07-24": [],
+  "2026-07-26": [{
+    "latitude": 40.19034166519526,
+    "longitude": 16.514543370932678
+  }],
+  "2026-07-31": [  ],
+  "2026-08-02": [],
+  "2026-08-04": [{
+    "latitude": 40.55523943992824,
+    "longitude": 16.758698679287654
+  }, {
+    "latitude": 40.95443876066149,
+    "longitude": 15.97200756214627
+  },
+{
+    "latitude": 40.919893256434804,
+    "longitude": 15.96857969437253
+}
+],
+  "2026-08-08": [{
+    "latitude": 40.817004285296434,
+    "longitude": 16.299667442893124
+  }],
+  "2026-08-12": [],
+  "2026-09-04": [],
+  "2026-09-05": [],
+  "2026-09-06": [
+   {
+     "latitude": 40.719888129592924,
+     "longitude": 16.601301769350105
+   }
+  ],
+  "2026-09-11": [
+    {
+      "latitude": 40.781216453568724,
+      "longitude": 16.231105412293406
+    },
+    {
+      "latitude": 40.76334444612904,
+      "longitude": 16.221433247603038
+    },
+    {
+      "latitude": 40.518895404130554,
+      "longitude": 16.427122993579438
+    },
+    {
+      "latitude": 40.29722271088041,
+      "longitude": 16.576326388925892
+    },
+    {
+      "latitude": 40.370997229312025,
+      "longitude": 16.673981509965806
+    },
+    {
+      "latitude": 40.39011169222458,
+      "longitude": 16.703945813714277
+    },
+    {
+      "latitude": 40.44172284407338,
+      "longitude": 16.65169525555643
+    }
+  ],
+  "2026-09-12": [
+    {
+      "latitude": 40.797863924872814,
+      "longitude": 16.280783758213076
+    },
+    {
+      "latitude": 40.374393989104725,
+      "longitude": 16.71151056187587
+    },
+    {
+      "latitude": 40.39269814371657,
+      "longitude": 16.79716495809612
+    }
+  ],
+  "2026-09-13": [{
+    "latitude": 40.36789921372715,
+    "longitude": 16.829402422040335
+  },
+  {
+    "latitude": 40.37818378324306,
+    "longitude": 16.813688275115542
+  }]
+}

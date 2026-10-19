@@ -1,0 +1,1802 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voli GVA 2026 in 3D</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.32.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.32.0/mapbox-gl.js"></script>
+<style>
+  :root {
+    --ink: #17202a;
+    --muted: #68737d;
+    --accent: #dc3d42;
+    --line: #d9dee3;
+    --traccia: #ffd400;
+    --incendio: #ee3d22;
+    --pannello: #ffffff;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; margin: 0; }
+
+  body {
+    color: var(--ink);
+    font: 15px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #eef1f3;
+  }
+
+  #mappa { position: absolute; inset: 0; }
+
+  .pannello {
+    position: absolute;
+    z-index: 2;
+    top: 14px;
+    left: 14px;
+    width: min(94vw, 330px);
+    max-height: calc(100vh - 28px);
+    overflow-y: auto;
+    padding: 14px;
+    border-radius: 10px;
+    background: #fffffff2;
+    box-shadow: 0 6px 28px #17202a26;
+    backdrop-filter: blur(6px);
+  }
+
+  .pannello h1 { margin: 0 0 2px; font-size: 1.05rem; }
+  .pannello .sottotitolo { margin: 0 0 12px; color: var(--muted); font-size: .78rem; }
+
+  .campo { display: block; margin: 0 0 10px; }
+  .campo > span { display: block; margin-bottom: 4px; color: var(--muted); font-size: .78rem; }
+
+  select, input[type="text"], button {
+    width: 100%;
+    min-height: 34px;
+    padding: 6px 9px;
+    border: 1px solid #b7c0c8;
+    border-radius: 7px;
+    background: #fff;
+    color: var(--ink);
+    font: inherit;
+  }
+
+  select:hover, input[type="text"]:hover, button:hover { border-color: var(--accent); }
+  button { cursor: pointer; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.principale { border-color: var(--accent); background: var(--accent); color: #fff; }
+
+  .riga { display: flex; gap: 8px; }
+  .riga > * { flex: 1; }
+
+  /* Sfondo della mappa: due bottoni affiancati, quello in uso in risalto. */
+  .scelta { display: flex; gap: 6px; }
+
+  .scelta button {
+    flex: 1;
+    min-height: 32px;
+    font-size: .82rem;
+  }
+
+  .scelta button.attivo {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .scelta button.attivo:hover { border-color: var(--accent); }
+
+  /* Casella per accendere e spegnere le anomalie termiche: il quadratino a
+     sinistra, l'etichetta che riempie la riga, il conteggio allineato a destra. */
+  .interruttore {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    padding: 7px 9px;
+    border: 1px solid #b7c0c8;
+    border-radius: 7px;
+    background: #fff;
+    font-size: .8rem;
+    cursor: pointer;
+  }
+
+  .interruttore:hover { border-color: var(--accent); }
+
+  .interruttore input {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--accent);
+  }
+
+  .interruttore span {
+    display: flex;
+    flex: 1;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--muted);
+  }
+
+  .interruttore b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .interruttore:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+  .valori {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    margin: 12px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    font-size: .8rem;
+  }
+
+  .valori dt { color: var(--muted); }
+  .valori dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+  .profilo {
+    display: block;
+    width: 100%;
+    height: 74px;
+    margin-top: 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #f7f9fa;
+    /* Si trascina per spostarsi lungo il volo: il cursore lo dice, e "touch-action"
+       evita che sul telefono il gesto faccia scorrere il pannello. */
+    cursor: ew-resize;
+    touch-action: none;
+  }
+
+  .profilo:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .avviso {
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    background: #fff4e5;
+    color: #8a5a12;
+    font-size: .78rem;
+  }
+
+  .avviso.errore { background: #fdf2f2; color: #8d2b2f; }
+  .nascosto { display: none !important; }
+
+  .aiuto {
+    position: absolute;
+    z-index: 3;
+    top: 14px;
+    right: 14px;
+  }
+
+  .aiuto > button {
+    width: 34px;
+    height: 34px;
+    min-height: 0;
+    padding: 0;
+    border-radius: 50%;
+    background: #fffffff2;
+    font-weight: 700;
+    box-shadow: 0 4px 18px #17202a1f;
+    backdrop-filter: blur(6px);
+  }
+
+  /* Il fumetto si apre a sinistra del "?" per non uscire dallo schermo. */
+  .fumetto {
+    position: absolute;
+    top: 0;
+    right: 44px;
+    width: 236px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    background: #17202af2;
+    color: #fff;
+    font-size: .75rem;
+    line-height: 1.45;
+    text-align: left;
+    box-shadow: 0 6px 22px #17202a33;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .12s ease;
+  }
+
+  .aiuto:hover .fumetto,
+  .aiuto:focus-within .fumetto { opacity: 1; visibility: visible; }
+
+  .fumetto p { margin: 0 0 5px; }
+  .fumetto .titolo { font-weight: 700; }
+  .fumetto .nota { margin-bottom: 0; color: #cfd6dc; }
+  .fumetto ul { margin: 0 0 6px; padding-left: 16px; }
+  .fumetto b { color: var(--traccia); }
+
+  .legenda {
+    position: absolute;
+    z-index: 2;
+    right: 14px;
+    bottom: 14px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: #fffffff2;
+    color: var(--muted);
+    font-size: .75rem;
+    box-shadow: 0 4px 18px #17202a1f;
+  }
+
+  .legenda i {
+    display: inline-block;
+    width: 22px;
+    height: 4px;
+    margin-right: 6px;
+    border-radius: 3px;
+    background: var(--traccia);
+    box-shadow: 0 0 0 1px #00000059;
+    vertical-align: middle;
+  }
+
+  .legenda div + div { margin-top: 4px; }
+
+  .legenda .punto {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: #ff5722;
+    box-shadow: 0 0 0 1px #ffffffb3;
+    vertical-align: middle;
+  }
+
+  /* Il pallino tondo è la segnalazione a terra; il rettangolo è il pixel del
+     satellite, quindi la forma li distingue a colpo d'occhio. */
+  .legenda .punto.incendio {
+    border-radius: 50%;
+    background: var(--incendio);
+  }
+
+  .legenda .pixel {
+    display: inline-block;
+    width: 13px;
+    height: 8px;
+    margin-right: 6px;
+    border: 1px solid #ffffffb3;
+    background: #ff5722;
+    vertical-align: middle;
+  }
+
+  /* Scheda che si apre al clic su un'anomalia termica. */
+  .mapboxgl-popup-content {
+    padding: 10px 12px;
+    border-radius: 9px;
+    font: 12px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  .scheda h2 { margin: 0 0 6px; font-size: .8rem; }
+
+  .scheda dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 12px;
+    margin: 0;
+  }
+
+  .scheda dt { color: var(--muted); }
+  .scheda dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 700px) {
+    .pannello { top: 8px; left: 8px; width: calc(100vw - 16px); padding: 11px; }
+    .legenda { display: none; }
+    /* Il pannello occupa tutta la larghezza: il "?" scende in basso a destra. */
+    .aiuto { top: auto; bottom: 14px; }
+    .fumetto { top: auto; bottom: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="mappa"></div>
+
+<div class="aiuto">
+  <button id="aiuto-camera" type="button" aria-describedby="fumetto-camera" aria-label="Come ruotare la camera">?</button>
+  <div class="fumetto" id="fumetto-camera" role="tooltip">
+    <p class="titolo">Ruotare la camera</p>
+    <ul>
+      <li><b>tasto destro</b> e trascina, oppure <b>Ctrl</b> + trascina;</li>
+      <li>sul touch: trascina con <b>due dita</b>.</li>
+    </ul>
+    <p class="nota">Mentre segui il volo la camera insegue l'aereo, ma l'orientamento che scegli resta.</p>
+  </div>
+</div>
+
+<aside class="pannello">
+  <h1>Voli GVA 2026 in 3D</h1>
+  <p class="sottotitolo">Tracciati da <code>./kml</code> · quota reale sul terreno</p>
+
+  <p id="avviso-token" class="avviso nascosto"></p>
+  <p id="avviso-errore" class="avviso errore nascosto"></p>
+
+  <label class="campo" for="selettore-volo"><span>Volo</span>
+    <select id="selettore-volo"></select>
+  </label>
+
+  <div class="campo">
+    <span>Sfondo</span>
+    <div class="scelta" role="group" aria-label="Sfondo della mappa">
+      <button id="sfondo-satellite" type="button" aria-pressed="true" disabled>Satellite</button>
+      <button id="sfondo-stradale" type="button" aria-pressed="false" disabled>Mappa</button>
+    </div>
+  </div>
+
+  <label class="campo" for="cursore-esagerazione"><span>Rilievo <b id="valore-esagerazione">1,0</b>×</span>
+    <input id="cursore-esagerazione" type="range" min="1" max="3" step="0.1" value="1">
+  </label>
+
+  <label class="campo" for="cursore-velocita"><span>Velocità riproduzione <b id="valore-velocita">20</b>×</span>
+    <input id="cursore-velocita" type="range" min="1" max="100" step="1" value="20">
+  </label>
+
+  <label class="interruttore" for="mostra-anomalie">
+    <input id="mostra-anomalie" type="checkbox" checked>
+    <span>Anomalie termiche al suolo <b id="conteggio-anomalie">—</b></span>
+  </label>
+
+  <label class="interruttore" for="mostra-incendi">
+    <input id="mostra-incendi" type="checkbox" checked>
+    <span>Incendi segnalati a terra <b id="conteggio-incendi">—</b></span>
+  </label>
+
+  <div class="riga">
+    <button id="pulsante-vola" class="principale" type="button" disabled>Segui il volo</button>
+    <button id="pulsante-inquadra" type="button" disabled>Inquadra tutto</button>
+  </div>
+
+  <dl class="valori">
+    <dt>Punti</dt><dd id="valore-punti">—</dd>
+    <dt>Distanza</dt><dd id="valore-distanza">—</dd>
+    <dt>Quota</dt><dd id="valore-quota">—</dd>
+    <dt>Ora</dt><dd id="valore-ora">—</dd>
+  </dl>
+
+  <canvas id="profilo" class="profilo" width="600" height="148" tabindex="0" role="slider"
+    aria-label="Profilo di quota: posizione lungo il volo" aria-valuemin="0" aria-valuemax="100"
+    aria-valuenow="0" aria-valuetext="0%"
+    title="Trascina per spostarti lungo il volo"></canvas>
+</aside>
+
+<div class="legenda">
+  <div><i></i>Traccia alla quota di volo · ombra sulla proiezione al suolo</div>
+  <div><span class="pixel"></span>Anomalia termica · rettangolo della misura reale del pixel (colore dalla potenza, FRP)</div>
+  <div><span class="punto incendio"></span>Incendio segnalato a terra · da <code>incendi.json</code></div>
+</div>
+
+<script type="module">
+// ---------------------------------------------------------------------------
+// Da impostare
+// ---------------------------------------------------------------------------
+// Chiave di accesso Mapbox (mapbox.com → Account → Access tokens). Non sta qui: il
+// repository è pubblico, e una chiave scritta nel sorgente è una chiave regalata.
+// Vive in ".env", e "node genera-config.mjs" ne ricava "config.json", che la pagina
+// legge all'avvio. Senza, la mappa non parte e la pagina spiega cosa manca.
+let tokenMapbox = "";
+
+// I due sfondi fra cui si può scegliere. Il satellite è una fotografia scura, e i
+// segni disegnati sopra hanno bisogno di un contorno chiaro per staccarsene; la
+// mappa stradale è chiara e vuole il contrario.
+const SFONDI = {
+  satellite: {
+    nome: "Satellite",
+    stile: "mapbox://styles/mapbox/satellite-streets-v12",
+    contorno: "#ffffff"
+  },
+  stradale: {
+    nome: "Mappa",
+    // OpenFreeMap, stile "Positron": vettoriale, senza chiave né registrazione.
+    stile: "https://tiles.openfreemap.org/styles/positron",
+    contorno: "#17202a"
+  }
+};
+
+const CARTELLA_KML = "./kml";
+
+// Anomalie termiche al suolo rilevate dai satelliti (VIIRS, MODIS), raccolte per
+// giorno: { "2026-07-05": { id: { latitude, longitude, frp, brightness, ... } } }.
+// Le rilevazioni sono i pixel del sensore: `scan` e `track` (chilometri) ne danno
+// la misura reale a terra.
+const FILE_ANOMALIE = "./anomalies.json";
+
+// Incendi segnalati a terra, da compilare a mano nella stessa forma:
+// { "2026-07-05": [ { nome, latitude, longitude, note } ] }.
+const FILE_INCENDI = "./incendi.json";
+
+// Se una rilevazione arrivasse senza scan o track, il lato del rettangolo ricade
+// sul pixel del VIIRS. Nessuna delle rilevazioni attuali ne è priva.
+const LATO_ASSENTE = 0.75;
+
+// Colore del rettangolo in base alla potenza radiativa del fuoco (FRP, in megawatt).
+const COLORE_ANOMALIA = [
+  "interpolate", ["linear"], ["coalesce", ["get", "frp"], 0],
+  0, "#ffe066",
+  5, "#ffa733",
+  20, "#ff5722",
+  60, "#d32f2f",
+  120, "#8e0000"
+];
+
+// Pallino degli incendi segnalati a terra: tondo e di colore freddo, per non
+// confonderlo con i rettangoli arancioni delle rilevazioni.
+const RAGGIO_INCENDIO = 6;
+
+// Sorgente del modello digitale del terreno e quanto esagerarne il rilievo.
+const DEM = "mapbox://mapbox.mapbox-terrain-dem-v1";
+// Il rilievo si può esagerare, ma la quota dei voli no: con il rilievo stirato la
+// traccia resta alla sua quota vera, quindi conviene lasciare 1 e alzarlo solo per
+// guardare. "line-elevation-ground-scale" fa seguire alla traccia la stessa
+// esagerazione del terreno, così non finisce sepolta dentro i colli.
+const ESAGERAZIONE_INIZIALE = 1;
+
+// Passo del campionamento della traccia, in metri. line-progress avanza con lo
+// spazio percorso: se i vertici sono equidistanti, l'elenco delle quote combacia
+// esattamente con la posizione lungo la linea.
+const PASSO_CAMPIONAMENTO = 40;
+
+// Raggio, in metri, dell'anello con cui si disegna il punto dell'aereo. È minuscolo
+// di proposito: lo spessore del tratto è in pixel di schermo, quindi il punto resta
+// grande uguale a ogni zoom invece di gonfiarsi avvicinandosi.
+const RAGGIO_PUNTO = 8;
+
+// Inclinazione di partenza della camera, in gradi.
+const INCLINAZIONE_INIZIALE = 62;
+
+// Inseguimento della camera durante la riproduzione. La posizione dell'aereo
+// avanza a scatti (i punti della traccia distano 40 m), quindi la camera non ci
+// salta sopra: si sposta di una frazione della distanza che la separa dal bersaglio,
+// frazione calcolata sul tempo trascorso fra due fotogrammi. Questo è il tempo in
+// secondi in cui copre circa due terzi della distanza: più alto, più morbido e più
+// in ritardo sull'aereo.
+const INSEGUIMENTO_SECONDI = 0.35;
+
+// Zoom minimo con cui parte la riproduzione: da lì in poi la camera è libera.
+const ZOOM_INSEGUIMENTO = 12.5;
+
+// Quota da cui parte la linea quando il tracciato non ha la terza coordinata.
+const QUOTA_ASSENTE = 0;
+
+// Elenco di riserva se il server non mostra l'indice della cartella.
+const FILE_KML = [
+  "1b 050726.kml", "2 100726.kml", "3 110726.kml", "4 240726.kml", "5 260726.kml",
+  "6 310726.kml", "7 020826.kml", "8 040826.kml", "9 080826.kml", "10 120826.kml",
+  "11 040926.kml", "12 050926.kml", "13 060926.kml", "14 110926.kml", "15 120926.kml",
+  "16 130926.kml"
+];
+
+const MESI = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+const NOMI_MESI = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+
+// Numero a due cifre: serve a comporre le date "2026-07-05" con cui sono
+// raggruppate le anomalie.
+const due = numero => String(numero).padStart(2, "0");
+
+// Numero con la virgola decimale, come si scrive in italiano.
+const decimale = (valore, cifre) => valore.toFixed(cifre).replace(".", ",");
+
+// Testo messo al sicuro per l'HTML delle schede: nomi e note arrivano da un file
+// scritto a mano.
+const scappa = testo => String(testo).replace(/[&<>"]/g, carattere =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[carattere]);
+
+// Riga delle schede: le voci senza valore si saltano.
+const rigaScheda = (voce, valore) => valore ? `<dt>${scappa(voce)}</dt><dd>${scappa(valore)}</dd>` : "";
+
+// ---------------------------------------------------------------------------
+// Riferimenti
+// ---------------------------------------------------------------------------
+const avvisoToken = document.querySelector("#avviso-token");
+const avvisoErrore = document.querySelector("#avviso-errore");
+const selettoreVolo = document.querySelector("#selettore-volo");
+const cursoreEsagerazione = document.querySelector("#cursore-esagerazione");
+const valoreEsagerazione = document.querySelector("#valore-esagerazione");
+const cursoreVelocita = document.querySelector("#cursore-velocita");
+const valoreVelocita = document.querySelector("#valore-velocita");
+const pulsanteVola = document.querySelector("#pulsante-vola");
+const pulsanteInquadra = document.querySelector("#pulsante-inquadra");
+const pulsanteSatellite = document.querySelector("#sfondo-satellite");
+const pulsanteStradale = document.querySelector("#sfondo-stradale");
+const valorePunti = document.querySelector("#valore-punti");
+const valoreDistanza = document.querySelector("#valore-distanza");
+const valoreQuota = document.querySelector("#valore-quota");
+const valoreOra = document.querySelector("#valore-ora");
+const profilo = document.querySelector("#profilo");
+const mostraAnomalie = document.querySelector("#mostra-anomalie");
+const conteggioAnomalie = document.querySelector("#conteggio-anomalie");
+const mostraIncendi = document.querySelector("#mostra-incendi");
+const conteggioIncendi = document.querySelector("#conteggio-incendi");
+
+let voli = [];
+let volo = null;
+let mappa = null;
+let volo3d = false;
+let riproduzione = null;
+// Sfondo in uso: "satellite" o "stradale" (le chiavi di SFONDI).
+let sfondo = "satellite";
+// Non nullo mentre si cambia sfondo: dice che al ritorno dei livelli il volo va
+// ripreso dalla posizione che aveva, invece che dall'inizio.
+let posizioneDaRiprendere = null;
+// Gli archivi completi (anomalie satellitari e segnalazioni a terra) e quelli del
+// volo scelto.
+let anomalie = null;
+let anomalieVolo = [];
+let incendi = null;
+let incendiVolo = [];
+// La scheda aperta su un punto, per poterla chiudere prima di aprirne un'altra.
+let popupAperto = null;
+// Indice dell'ultimo punto toccato dalla riproduzione. `posizioneCorrente` è
+// frazionario e serve al disegno, `indiceCorrente` è arrotondato e serve ai numeri.
+let indiceCorrente = 0;
+let posizioneCorrente = 0;
+// Zoom che la camera deve raggiungere all'avvio della riproduzione; null quando
+// l'ha raggiunto e non va più toccato.
+let zoomInseguimento = null;
+// Falso quando l'utente ruota la camera a mano: da lì in poi la prua resta la sua.
+let insegueRotta = true;
+
+// ---------------------------------------------------------------------------
+// Lettura dei KML
+// ---------------------------------------------------------------------------
+async function elencaKml() {
+  try {
+    const risposta = await fetch(`${CARTELLA_KML}/`);
+    if (!risposta.ok) throw new Error(`HTTP ${risposta.status}`);
+
+    const pagina = new DOMParser().parseFromString(await risposta.text(), "text/html");
+    const nomi = [...pagina.querySelectorAll("a")]
+      .map(ancora => ancora.getAttribute("href") ?? "")
+      .filter(indirizzo => /\.kml$/i.test(indirizzo))
+      .map(indirizzo => decodeURIComponent(indirizzo.replace(/^.*\//, "")));
+
+    if (nomi.length) return nomi.sort((a, b) => a.localeCompare(b, "it", { numeric: true, sensitivity: "base" }));
+  } catch (errore) {
+    console.warn(`Indice di ${CARTELLA_KML} non disponibile, uso FILE_KML:`, errore.message);
+  }
+  return FILE_KML.slice();
+}
+
+function leggiKml(nome, sorgente) {
+  const xml = new DOMParser().parseFromString(sorgente, "application/xml");
+  if (xml.querySelector("parsererror")) throw new Error("XML non valido");
+
+  // Il tracciato di SkyDemon: una quota per punto, in metri sul livello del mare.
+  const coordinata = nodo => {
+    const [lon, lat, alt] = nodo.textContent.trim().split(/\s+/).map(Number);
+    return [lon, lat, Number.isFinite(alt) ? alt : QUOTA_ASSENTE];
+  };
+
+  let punti = [...xml.getElementsByTagNameNS("http://www.google.com/kml/ext/2.2", "coord")].map(coordinata);
+
+  // File già convertiti in LineString: la terza coordinata è la quota. Il blocco
+  // più lungo è la traccia; gli altri sono le bandierine di partenza e arrivo.
+  if (punti.length < 2) {
+    const blocchi = [...xml.getElementsByTagName("coordinates")]
+      .map(nodo => nodo.textContent.trim().split(/\s+/).filter(Boolean))
+      .filter(valori => valori.length > 2);
+
+    blocchi.sort((a, b) => b.length - a.length);
+    punti = (blocchi[0] ?? [])
+      .map(valore => valore.split(",").map(Number))
+      .filter(valore => Number.isFinite(valore[0]) && Number.isFinite(valore[1]))
+      .map(([lon, lat, alt]) => [lon, lat, Number.isFinite(alt) ? alt : QUOTA_ASSENTE]);
+  }
+
+  if (punti.length < 2) throw new Error("nessun punto di traccia");
+
+  const orari = [...xml.getElementsByTagName("when")].map(nodo => nodo.textContent.trim());
+  const nomi = [...xml.getElementsByTagName("name")].map(nodo => nodo.textContent.trim());
+  const data = dataVolo(nomi, orari);
+
+  return {
+    nome,
+    etichetta: nome.replace(/\.kml$/i, ""),
+    data: data.etichetta,
+    dataIso: data.iso,
+    punti,
+    orari: orari.length === punti.length ? orari : null
+  };
+}
+
+// Il volo serve in due modi: l'etichetta da mostrare nel selettore e la data in
+// forma "AAAA-MM-GG", che è la chiave con cui sono raggruppate le anomalie termiche.
+function dataVolo(nomi, orari) {
+  const inizio = nomi.find(nome => /^Log Start:/i.test(nome));
+  const trovata = /(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})/.exec(inizio ?? "");
+  const mese = trovata && MESI[trovata[2].toLowerCase()];
+  if (mese !== undefined) {
+    const giorno = Number(trovata[1]);
+    return {
+      etichetta: `${giorno} ${NOMI_MESI[mese]}`,
+      iso: `${trovata[3]}-${due(mese + 1)}-${due(giorno)}`
+    };
+  }
+
+  const data = orari[0] && new Date(orari[0]);
+  if (data && !Number.isNaN(data.getTime())) {
+    const parti = new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "long", timeZone: "Europe/Rome" })
+      .formatToParts(data);
+    const giorno = parti.find(parte => parte.type === "day")?.value;
+    const nome = parti.find(parte => parte.type === "month")?.value;
+    // en-CA scrive la data come "2026-07-05": la stessa forma dell'archivio.
+    const iso = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Europe/Rome" })
+      .format(data);
+    if (giorno && nome) return { etichetta: `${giorno} ${nome[0].toUpperCase()}${nome.slice(1)}`, iso };
+  }
+  return { etichetta: "Data non disponibile", iso: null };
+}
+
+async function caricaVoli() {
+  const nomi = await elencaKml();
+  const letti = await Promise.all(nomi.map(async nome => {
+    try {
+      const risposta = await fetch(`${CARTELLA_KML}/${encodeURIComponent(nome)}`);
+      if (!risposta.ok) throw new Error(`HTTP ${risposta.status}`);
+      return leggiKml(nome, await risposta.text());
+    } catch (errore) {
+      console.error(`Impossibile leggere ${nome}`, errore);
+      return null;
+    }
+  }));
+
+  return letti
+    .filter(Boolean)
+    .map(completaVolo);
+}
+
+// Le anomalie termiche al suolo, tutte insieme. Il file è un unico oggetto con la
+// data come chiave: si legge una volta e si consulta a ogni cambio di volo.
+async function caricaAnomalie() {
+  try {
+    const risposta = await fetch(FILE_ANOMALIE);
+    if (!risposta.ok) throw new Error(`HTTP ${risposta.status}`);
+    return await risposta.json();
+  } catch (errore) {
+    console.warn(`Anomalie non disponibili (${errore.message}): si prosegue senza punti caldi.`);
+    return null;
+  }
+}
+
+// Le anomalie rilevate il giorno del volo.
+function anomalieDelVolo(volo) {
+  const giorno = volo?.dataIso ? anomalie?.[volo.dataIso] : null;
+  return giorno ? Object.values(giorno) : [];
+}
+
+// Le segnalazioni di incendi reali, tutte insieme. Il file è scritto a mano, quindi
+// si accetta qualche libertà: le coordinate possono arrivare come stringhe e le
+// voci incomplete vengono saltate con un avviso nella console invece di rompere la
+// mappa.
+async function caricaIncendi() {
+  try {
+    const risposta = await fetch(FILE_INCENDI);
+    if (!risposta.ok) throw new Error(`HTTP ${risposta.status}`);
+    const letto = await risposta.json();
+
+    for (const [giorno, elenco] of Object.entries(letto)) {
+      if (giorno.startsWith("_")) continue;
+      if (!Array.isArray(elenco)) {
+        console.warn(`Incendi: ${giorno} non è un elenco, ignorato.`);
+        delete letto[giorno];
+      }
+    }
+    return letto;
+  } catch (errore) {
+    console.warn(`Incendi non disponibili (${errore.message}): si prosegue senza segnalazioni.`);
+    return null;
+  }
+}
+
+// Gli incendi segnalati il giorno del volo, scartando le voci senza coordinate
+// valide.
+function incendiDelVolo(volo) {
+  const elenco = volo?.dataIso ? incendi?.[volo.dataIso] : null;
+  if (!Array.isArray(elenco)) return [];
+
+  return elenco
+    .map(voce => ({ ...voce, latitude: Number(voce?.latitude), longitude: Number(voce?.longitude) }))
+    .filter(voce => {
+      const valida = Number.isFinite(voce.latitude) && Number.isFinite(voce.longitude);
+      if (!valida) console.warn(`Incendio ignorato il ${volo.dataIso}: coordinate mancanti o non numeriche.`, voce);
+      return valida;
+    });
+}
+
+// Distanze progressive, quota massima, durata: servono al disegno e alla riproduzione.
+function completaVolo(volo) {
+  const distanza = [0];
+  for (let i = 1; i < volo.punti.length; i += 1) {
+    distanza.push(distanza[i - 1] + metri(volo.punti[i - 1], volo.punti[i]));
+  }
+
+  const quote = volo.punti.map(punto => punto[2]);
+  volo.distanza = distanza;
+  volo.lunghezza = distanza[distanza.length - 1];
+  volo.quotaMinima = Math.min(...quote);
+  volo.quotaMassima = Math.max(...quote);
+  volo.durata = volo.orari ? (Date.parse(volo.orari[volo.orari.length - 1]) - Date.parse(volo.orari[0])) / 1000 : 0;
+  volo.campioni = campiona(volo.punti, PASSO_CAMPIONAMENTO);
+  return volo;
+}
+
+// Ricampiona la traccia a intervalli regolari di distanza, interpolando quota e
+// posizione. Serve al disegno: è la condizione perché l'elenco delle quote
+// corrisponda alla posizione lungo la linea.
+function campiona(punti, passo) {
+  const campioni = [punti[0].slice()];
+  let avanzo = 0;
+
+  for (let i = 1; i < punti.length; i += 1) {
+    const inizio = punti[i - 1];
+    const fine = punti[i];
+    const tratto = metri(inizio, fine);
+    if (tratto === 0) continue;
+
+    let percorso = passo - avanzo;
+    while (percorso <= tratto) {
+      const frazione = percorso / tratto;
+      campioni.push([
+        inizio[0] + (fine[0] - inizio[0]) * frazione,
+        inizio[1] + (fine[1] - inizio[1]) * frazione,
+        inizio[2] + (fine[2] - inizio[2]) * frazione
+      ]);
+      percorso += passo;
+    }
+    avanzo = (avanzo + tratto) % passo;
+  }
+
+  const ultimo = punti[punti.length - 1];
+  const coda = campioni[campioni.length - 1];
+  if (coda[0] !== ultimo[0] || coda[1] !== ultimo[1]) campioni.push(ultimo.slice());
+  return campioni;
+}
+
+// Distanza in metri fra due punti quotati, con la formula dell'emisenoverso.
+function metri([lonA, latA, altA], [lonB, latB, altB]) {
+  const raggio = 6371008.8;
+  const radianti = gradi => gradi * Math.PI / 180;
+  const dLat = radianti(latB - latA);
+  const dLon = radianti(lonB - lonA);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(radianti(latA)) * Math.cos(radianti(latB)) * Math.sin(dLon / 2) ** 2;
+  const piano = 2 * raggio * Math.asin(Math.min(1, Math.sqrt(a)));
+  return Math.hypot(piano, altB - altA);
+}
+
+// ---------------------------------------------------------------------------
+// GeoJSON
+// ---------------------------------------------------------------------------
+const punti = coordinate => ({
+  type: "Feature",
+  properties: {},
+  geometry: { type: "LineString", coordinates: coordinate }
+});
+
+// La traccia volata: una sola linea con l'elenco delle quote. La quota non va
+// nelle coordinate (mapbox-gl non legge la terza coordinata), ma in una proprietà
+// che line-z-offset interpola lungo la linea con line-progress.
+function geojsonTraccia(volo) {
+  return {
+    type: "Feature",
+    properties: { quota: volo.campioni.map(punto => punto[2]) },
+    geometry: {
+      type: "LineString",
+      coordinates: volo.campioni.map(punto => [punto[0], punto[1]])
+    }
+  };
+}
+
+// La stessa traccia appoggiata al suolo: si legge come ombra e fa capire di quanto
+// il volo stia sopra il terreno.
+function geojsonOmbra(volo) {
+  return punti(volo.campioni.map(punto => [punto[0], punto[1]]));
+}
+
+// L'impronta a terra di una rilevazione. `scan` è la misura lungo la scansione
+// (trasversale alla rotta del satellite) e `track` quella lungo la rotta: qui la
+// prima viene presa come est-ovest e la seconda come nord-sud, che alle latitudini
+// italiane approssima bene il passaggio di un satellite polare quasi nord-sud.
+// L'azimut del satellite non è nel dato, quindi di meglio non si può fare.
+function rettangoloAnomalia(anomalia) {
+  const lat = anomalia.latitude;
+  const lon = anomalia.longitude;
+  const latoScan = Number.isFinite(anomalia.scan) ? anomalia.scan : LATO_ASSENTE;
+  const latoTrack = Number.isFinite(anomalia.track) ? anomalia.track : LATO_ASSENTE;
+  const metaLat = (latoTrack / 2) / 111.32;
+  const metaLon = (latoScan / 2) / (111.32 * Math.cos((lat * Math.PI) / 180));
+  const vertici = [
+    [lon - metaLon, lat - metaLat],
+    [lon + metaLon, lat - metaLat],
+    [lon + metaLon, lat + metaLat],
+    [lon - metaLon, lat + metaLat]
+  ];
+  // L'anello va chiuso ripetendo il primo vertice.
+  return [[...vertici, vertici[0]]];
+}
+
+// Le anomalie termiche al suolo come rettangoli della misura reale del pixel. Le
+// proprietà che servono al disegno (la potenza FRP) e alla scheda viaggiano con la
+// geometria.
+function geojsonAnomalie(elenco) {
+  return {
+    type: "FeatureCollection",
+    features: elenco.map(anomalia => ({
+      type: "Feature",
+      properties: {
+        frp: Number.isFinite(anomalia.frp) ? anomalia.frp : 0,
+        // La temperatura di brillanza manca in qualche rilevazione: resta null e la
+        // scheda salta la riga.
+        brightness: Number.isFinite(anomalia.brightness) ? anomalia.brightness : null,
+        impronta: `${decimale(anomalia.scan ?? LATO_ASSENTE, 2)} × ${decimale(anomalia.track ?? LATO_ASSENTE, 2)} km`,
+        confidence: anomalia.confidence ?? "",
+        daynight: anomalia.daynight ?? "",
+        acqTime: anomalia.acqTime ?? "",
+        satellite: anomalia.satellite ?? "",
+        instrument: anomalia.instrument ?? ""
+      },
+      geometry: { type: "Polygon", coordinates: rettangoloAnomalia(anomalia) }
+    }))
+  };
+}
+
+// Gli incendi segnalati a terra come punti GeoJSON.
+function geojsonIncendi(elenco) {
+  return {
+    type: "FeatureCollection",
+    features: elenco.map(incendio => ({
+      type: "Feature",
+      properties: {
+        nome: String(incendio.nome ?? "").trim(),
+        note: String(incendio.note ?? "").trim(),
+        coordinate: `${incendio.latitude.toFixed(4)}, ${incendio.longitude.toFixed(4)}`
+      },
+      geometry: { type: "Point", coordinates: [incendio.longitude, incendio.latitude] }
+    }))
+  };
+}
+
+// Scheda che si apre al clic su una rilevazione.
+function schedaAnomalia(proprieta) {
+  const confidenza = { l: "bassa", n: "nominale", h: "alta" }[proprieta.confidence] ?? "—";
+  // L'orario di acquisizione arriva senza separatore e a volte senza zeri iniziali.
+  const quattro = String(proprieta.acqTime).padStart(4, "0");
+  const ora = /^\d{1,4}$/.test(String(proprieta.acqTime))
+    ? `${quattro.slice(0, 2)}:${quattro.slice(2)}`
+    : "—";
+  const satellite = [proprieta.instrument, proprieta.satellite].filter(Boolean).join(" · ");
+
+  return `<div class="scheda">
+    <h2>Anomalia termica al suolo</h2>
+    <dl>
+      ${rigaScheda("Ora rilevazione", ora)}
+      ${rigaScheda("Satellite", satellite)}
+      ${rigaScheda("Pixel a terra", proprieta.impronta)}
+      ${rigaScheda("Temp. brillanza", proprieta.brightness === null ? "" : `${decimale(proprieta.brightness, 1)} K`)}
+      ${rigaScheda("Potenza (FRP)", `${decimale(proprieta.frp, 1)} MW`)}
+      ${rigaScheda("Confidenza", confidenza)}
+      ${rigaScheda("Acquisizione", proprieta.daynight === "N" ? "notte" : "giorno")}
+    </dl>
+  </div>`;
+}
+
+// Scheda che si apre al clic su un incendio segnalato a terra.
+function schedaIncendio(proprieta) {
+  return `<div class="scheda">
+    <h2>${proprieta.nome ? scappa(proprieta.nome) : "Incendio segnalato"}</h2>
+    <dl>
+      ${rigaScheda("Coordinate", proprieta.coordinate)}
+      ${rigaScheda("Note", proprieta.note)}
+    </dl>
+  </div>`;
+}
+
+// Posizione dell'aereo a un punto qualunque della traccia. L'indice è frazionario:
+// la riproduzione lo fa avanzare poco a poco a ogni fotogramma, così il segnaposto
+// scivola invece di saltare da un punto all'altro (i punti distano 40 m).
+function puntoAPosizione(volo, posizione) {
+  const indice = Math.min(volo.punti.length - 2, Math.max(0, Math.floor(posizione)));
+  const frazione = Math.min(1, Math.max(0, posizione - indice));
+  const da = volo.punti[indice];
+  const a = volo.punti[indice + 1];
+  return [
+    da[0] + (a[0] - da[0]) * frazione,
+    da[1] + (a[1] - da[1]) * frazione,
+    da[2] + (a[2] - da[2]) * frazione
+  ];
+}
+
+// Legge un elenco allineato ai punti della traccia (le distanze progressive)
+// interpolando fra due campioni.
+function interpola(valori, posizione) {
+  const indice = Math.min(valori.length - 2, Math.max(0, Math.floor(posizione)));
+  const frazione = Math.min(1, Math.max(0, posizione - indice));
+  return valori[indice] + (valori[indice + 1] - valori[indice]) * frazione;
+}
+
+// Rotta dell'aereo nella posizione data: quella del tratto percorso negli ultimi
+// punti, lungo abbastanza da non tremare. Se i due punti coincidono la direzione non
+// è definita e si tiene quella attuale della camera.
+function rottaAllaPosizione(posizione) {
+  const punto = puntoAPosizione(volo, posizione);
+  const precedente = volo.punti[Math.max(0, Math.round(posizione) - 6)];
+  const fermo = Math.abs(punto[0] - precedente[0]) < 1e-9 && Math.abs(punto[1] - precedente[1]) < 1e-9;
+  return fermo ? mappa.getBearing() : rottaFra(precedente, punto);
+}
+
+// Il punto dell'aereo, alla quota di volo. Un dettaglio obbligato dal renderer: una
+// linea lunga zero non sarebbe disegnabile (la sua direzione sarebbe indefinita),
+// quindi il punto è un anello minuscolo; con il tratto largo qualche pixel e i giunti
+// arrotondati diventa un dischetto pieno, uguale a ogni zoom. La quota non sta nelle
+// coordinate (mapbox-gl non legge la terza), ma in un numero passato a line-z-offset.
+function geojsonPunto(punto) {
+  const latPerMetro = 1 / 111320;
+  const lonPerMetro = 1 / (111320 * Math.cos((punto[1] * Math.PI) / 180));
+  const raggioLat = RAGGIO_PUNTO * latPerMetro;
+  const raggioLon = RAGGIO_PUNTO * lonPerMetro;
+
+  const vertici = [];
+  for (let i = 0; i < 12; i += 1) {
+    const angolo = (i / 12) * 2 * Math.PI;
+    vertici.push([punto[0] + raggioLon * Math.cos(angolo), punto[1] + raggioLat * Math.sin(angolo)]);
+  }
+  vertici.push(vertici[0]);
+
+  return {
+    type: "FeatureCollection",
+    features: [
+      { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: vertici } }
+    ]
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mappa
+// ---------------------------------------------------------------------------
+function avviaMappa() {
+  mappa = new mapboxgl.Map({
+    container: "mappa",
+    style: SFONDI[sfondo].stile,
+    center: [16.5, 40.6],
+    zoom: 9,
+    pitch: INCLINAZIONE_INIZIALE,
+    bearing: 0,
+    attributionControl: true,
+    antialias: true
+  });
+
+  // Spessori in pixel di schermo: Mapbox li tiene fissi a ogni zoom. Il bordo
+  // scuro deve sporgere oltre la traccia, altrimenti resta nascosto sotto di essa.
+  const LARGHEZZA_OMBRA = 7;
+  const LARGHEZZA_TRACCIA = 10.6;
+  const LARGHEZZA_BORDO = LARGHEZZA_TRACCIA + 5;
+  // Diametro del punto dell'aereo: il bordo gli aggiunge attorno un anello scuro.
+  const LARGHEZZA_PUNTO = 9;
+
+  // Colore delle segnalazioni a terra: la stessa variabile CSS che colora il pallino
+  // della legenda, così i due non si possono scollare.
+  const INCENDIO = getComputedStyle(document.documentElement).getPropertyValue("--incendio").trim();
+
+  // Esposta per poterla ispezionare dalla console del browser. Non si può chiamare
+  // "mappa": gli id degli elementi diventano proprietà di window, e la div #mappa
+  // coprirebbe il nome.
+  window.mappa3d = mappa;
+
+  // Se l'utente ruota la camera a mano, l'inseguimento smette di raddrizzarne la
+  // prua: la rotazione torna quella del volo solo al prossimo avvio della traccia.
+  mappa.on("rotatestart", () => { insegueRotta = false; });
+  mappa.on("pitchstart", () => { insegueRotta = false; });
+
+  mappa.on("error", evento => {
+    const messaggio = evento.error?.message ?? String(evento.error);
+    // Un token assente o rifiutato arriva qui: è l'errore da spiegare per primo.
+    if (/token|unauthorized|401|403/i.test(messaggio)) mostraAvviso(avvisoToken,
+      `Mapbox ha rifiutato la chiave: ${messaggio}. Controlla MAPBOX_TOKEN nel file .env, rilancia "node genera-config.mjs" e ricarica.`);
+    else mostraAvviso(avvisoErrore, `Mapbox: ${messaggio}`);
+  });
+
+  // Sorgenti e livelli si aggiungono a mano, quindi vanno rimessi ogni volta che lo
+  // stile cambia: il nuovo sfondo se li porta via insieme a quello vecchio.
+  const aggiungiLivelli = () => {
+    // Il contorno dei segni a terra: chiaro sulla foto satellitare, scuro sulla
+    // mappa stradale.
+    const contorno = SFONDI[sfondo].contorno;
+
+    mappa.addSource("terreno", { type: "raster-dem", url: DEM, tileSize: 512, maxzoom: 14 });
+    mappa.setTerrain({ source: "terreno", exaggeration: Number(cursoreEsagerazione.value) });
+
+    mappa.addSource("ombra", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    // lineMetrics è obbligatorio per usare line-progress nell'espressione della quota.
+    mappa.addSource("traccia", {
+      type: "geojson",
+      lineMetrics: true,
+      data: { type: "FeatureCollection", features: [] }
+    });
+    mappa.addSource("punto", {
+      type: "geojson",
+      // Serve a line-z-offset, che è la proprietà con cui il punto sale alla quota
+      // di volo: senza, la quota non viene valutata.
+      lineMetrics: true,
+      data: { type: "FeatureCollection", features: [] }
+    });
+
+    mappa.addLayer({
+      id: "ombra",
+      type: "line",
+      source: "ombra",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#000000", "line-width": LARGHEZZA_OMBRA, "line-opacity": .35 }
+    });
+
+    // Dati a terra: le anomalie termiche rilevate dai satelliti e gli incendi
+    // segnalati a mano. I livelli si aggiungono più sotto, dopo la traccia, perché
+    // devono restare visibili anche quando il volo ci passa sopra.
+    mappa.addSource("anomalie", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    mappa.addSource("incendi", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+
+    // line-z-offset e line-elevation-reference sono proprietà di layout, non di
+    // pittura. Il metodo è quello dell'esempio ufficiale "elevated line": la quota
+    // è un elenco e line-progress dice a che punto della linea siamo.
+    const quotaALungoLaLinea = [
+      "at-interpolated",
+      ["*", ["line-progress"], ["-", ["length", ["get", "quota"]], 1]],
+      ["get", "quota"]
+    ];
+
+    const quotaTralineata = {
+      "line-cap": "round",
+      "line-join": "round",
+      "line-z-offset": quotaALungoLaLinea,
+      // Le quote del KML sono sul livello del mare.
+      "line-elevation-reference": "sea",
+      // Con il rilievo esagerato la traccia segue la stessa esagerazione: senza
+      // questo, alzando il cursore del rilievo la traccia finirebbe sotto i colli.
+      "line-elevation-ground-scale": 1
+    };
+
+    mappa.addLayer({
+      id: "traccia-bordo",
+      type: "line",
+      source: "traccia",
+      layout: quotaTralineata,
+      paint: {
+        "line-color": "#111111",
+        "line-width": LARGHEZZA_BORDO,
+        // Quando un colle la copre, la linea si fa trasparente invece di sparire.
+        "line-occlusion-opacity": .25
+      }
+    });
+
+    mappa.addLayer({
+      id: "traccia",
+      type: "line",
+      source: "traccia",
+      layout: quotaTralineata,
+      paint: {
+        "line-color": getComputedStyle(document.documentElement).getPropertyValue("--traccia").trim(),
+        "line-width": LARGHEZZA_TRACCIA,
+        "line-occlusion-opacity": .35
+      }
+    });
+
+    // I dati a terra stanno sopra la traccia: sono loro il dato da confrontare, e
+    // sotto la linea del volo finirebbero nascosti.
+
+    // Il rettangolo è l'impronta a terra del pixel del satellite, alla sua misura
+    // vera: alla scala della regione è grande pochi pixel, quindi il bordo bianco
+    // serve a trovarlo; da vicino si vede la misura esatta.
+    mappa.addLayer({
+      id: "anomalie",
+      type: "fill",
+      source: "anomalie",
+      paint: {
+        "fill-color": COLORE_ANOMALIA,
+        "fill-opacity": .6
+      }
+    });
+
+    mappa.addLayer({
+      id: "anomalie-bordo",
+      type: "line",
+      source: "anomalie",
+      layout: { "line-join": "round" },
+      paint: { "line-color": contorno, "line-width": 1.2, "line-opacity": .85 }
+    });
+
+    // Gli incendi segnalati a mano: un pallino tondo, che si distingue dai
+    // rettangoli delle rilevazioni anche quando sono vicini.
+    mappa.addLayer({
+      id: "incendi-alone",
+      type: "circle",
+      source: "incendi",
+      paint: {
+        "circle-radius": RAGGIO_INCENDIO * 2.2,
+        "circle-color": INCENDIO,
+        "circle-opacity": .2,
+        "circle-blur": .6
+      }
+    });
+
+    mappa.addLayer({
+      id: "incendi",
+      type: "circle",
+      source: "incendi",
+      paint: {
+        "circle-radius": RAGGIO_INCENDIO,
+        "circle-color": INCENDIO,
+        "circle-opacity": .95,
+        "circle-stroke-width": 2,
+        "circle-stroke-color": contorno
+      }
+    });
+
+    // Il punto dell'aereo, ultimo di tutti: sta sopra ogni cosa, anche ai dati a
+    // terra. Sono due strati sovrapposti — un anello scuro e il pieno bianco — e non
+    // del colore della traccia: l'aereo sta sempre *sulla* linea gialla, quindi deve
+    // staccarsene, non mimetizzarsi. La quota arriva a entrambi da "line-z-offset",
+    // aggiornata a ogni fotogramma della riproduzione.
+    const posto = {
+      "line-cap": "round",
+      "line-join": "round",
+      "line-elevation-reference": "sea",
+      // Come per la traccia: alzando il rilievo anche la quota del punto si stira
+      // nella stessa misura, altrimenti il punto resterebbe indietro e la linea gli
+      // passerebbe sopra.
+      "line-elevation-ground-scale": 1,
+      "line-z-offset": 0
+    };
+
+    mappa.addLayer({
+      id: "punto-bordo",
+      type: "line",
+      source: "punto",
+      layout: posto,
+      paint: { "line-color": "#111111", "line-width": LARGHEZZA_PUNTO + 5, "line-occlusion-opacity": .3 }
+    });
+
+    mappa.addLayer({
+      id: "punto",
+      type: "line",
+      source: "punto",
+      layout: posto,
+      paint: { "line-color": "#ffffff", "line-width": LARGHEZZA_PUNTO, "line-occlusion-opacity": .4 }
+    });
+
+    // Clic su un segno a terra: si apre la scheda con i dati della rilevazione o
+    // della segnalazione. Il fumetto si appoggia dove si è cliccato, perché le
+    // rilevazioni sono rettangoli e il loro centro non è una coordinata.
+    mappa.on("click", "anomalie", evento => {
+      const dato = evento.features?.[0];
+      if (dato) apriScheda(evento.lngLat, schedaAnomalia(dato.properties));
+    });
+
+    mappa.on("click", "incendi", evento => {
+      const dato = evento.features?.[0];
+      if (dato) apriScheda(evento.lngLat, schedaIncendio(dato.properties));
+    });
+
+    // Il cursore a mano avverte che il segno si può cliccare.
+    for (const livello of ["anomalie", "incendi"]) {
+      mappa.on("mouseenter", livello, () => { mappa.getCanvas().style.cursor = "pointer"; });
+      mappa.on("mouseleave", livello, () => { mappa.getCanvas().style.cursor = ""; });
+    }
+  };
+
+  // "style.load" scatta al primo caricamento e a ogni cambio di sfondo: è il momento
+  // in cui sorgenti e livelli tornano al loro posto.
+  const preparaStile = () => {
+    if (!mappa.getSource("traccia")) aggiungiLivelli();
+
+    volo3d = true;
+    pulsanteVola.disabled = false;
+    pulsanteInquadra.disabled = false;
+    pulsanteSatellite.disabled = false;
+    pulsanteStradale.disabled = false;
+    // Se i tracciati sono arrivati prima della mappa, disegnaVolo() e inquadraVolo()
+    // sono state chiamate a vuoto: si rifanno qui, quando la mappa è pronta.
+    disegnaVolo();
+
+    if (posizioneDaRiprendere !== null) {
+      // Si torna da un cambio di sfondo: il volo riprende da dov'era e la camera
+      // resta dove l'utente l'aveva lasciata.
+      portaA(posizioneDaRiprendere);
+      posizioneDaRiprendere = null;
+    } else {
+      inquadraVolo();
+    }
+  };
+
+  mappa.on("style.load", preparaStile);
+}
+
+function mostraAvviso(elemento, testo) {
+  elemento.textContent = testo;
+  elemento.classList.remove("nascosto");
+}
+
+// Apre una scheda sulla mappa, chiudendo quella eventualmente aperta.
+function apriScheda(coordinate, html) {
+  popupAperto?.remove();
+  popupAperto = new mapboxgl.Popup({ closeButton: true, offset: 14, maxWidth: "250px" })
+    .setLngLat(coordinate)
+    .setHTML(html)
+    .addTo(mappa);
+}
+
+function disegnaVolo() {
+  if (!volo3d || !volo) return;
+
+  mappa.getSource("traccia").setData(geojsonTraccia(volo));
+  mappa.getSource("ombra").setData(geojsonOmbra(volo));
+
+  // Rilevazioni e segnalazioni del giorno del volo: cambiano insieme al volo scelto.
+  anomalieVolo = anomalieDelVolo(volo);
+  mappa.getSource("anomalie").setData(geojsonAnomalie(anomalieVolo));
+  incendiVolo = incendiDelVolo(volo);
+  mappa.getSource("incendi").setData(geojsonIncendi(incendiVolo));
+  popupAperto?.remove();
+  popupAperto = null;
+  aggiornaComandoAnomalie();
+  aggiornaComandoIncendi();
+
+  indiceCorrente = 0;
+  posizioneCorrente = 0;
+  zoomInseguimento = null;
+  insegueRotta = true;
+  aggiornaPunto();
+  aggiornaLetture();
+  disegnaProfilo();
+
+  valorePunti.textContent = `${volo.punti.length} · quota ${volo.quotaMinima.toFixed(0)}–${volo.quotaMassima.toFixed(0)} m`;
+  valoreDistanza.textContent = `${(volo.lunghezza / 1000).toFixed(1)} km`;
+}
+
+// Tiene allineato il comando delle anomalie: mostra quante rilevazioni ha quel
+// giorno e lo spegne quando non ce ne sono. Se l'archivio non si è potuto leggere,
+// il comando sparisce del tutto e la mappa resta com'era.
+function aggiornaComandoAnomalie() {
+  if (!mostraAnomalie) return;
+
+  if (!anomalie) {
+    mostraAnomalie.closest(".interruttore")?.classList.add("nascosto");
+    return;
+  }
+
+  conteggioAnomalie.textContent = anomalieVolo.length;
+  mostraAnomalie.disabled = anomalieVolo.length === 0;
+  // Quando il comando si spegne, il motivo va detto: è quel giorno a non averne,
+  // non il volo.
+  const etichetta = mostraAnomalie.closest(".interruttore");
+  if (etichetta) {
+    etichetta.title = anomalieVolo.length
+      ? `${anomalieVolo.length} ${anomalieVolo.length === 1 ? "anomalia termica rilevata" : "anomalie termiche rilevate"} il ${volo.data}`
+      : `Nessuna anomalia termica rilevata il ${volo.data}`;
+  }
+
+  applicaVisibilitaAnomalie();
+}
+
+// Lo stesso per gli incendi segnalati a terra.
+function aggiornaComandoIncendi() {
+  if (!mostraIncendi) return;
+
+  if (!incendi) {
+    mostraIncendi.closest(".interruttore")?.classList.add("nascosto");
+    return;
+  }
+
+  conteggioIncendi.textContent = incendiVolo.length;
+  mostraIncendi.disabled = incendiVolo.length === 0;
+  const etichetta = mostraIncendi.closest(".interruttore");
+  if (etichetta) {
+    etichetta.title = incendiVolo.length
+      ? `${incendiVolo.length} ${incendiVolo.length === 1 ? "incendio segnalato" : "incendi segnalati"} il ${volo.data}`
+      : `Nessun incendio segnalato il ${volo.data} in incendi.json`;
+  }
+
+  applicaVisibilitaIncendi();
+}
+
+// Accende o spegne un gruppo di livelli secondo la casella e quello che c'è da
+// mostrare.
+function mostraLivelli(livelli, casella, quanti) {
+  if (!volo3d) return;
+  const visibile = casella.checked && quanti > 0 ? "visible" : "none";
+  for (const livello of livelli) mappa.setLayoutProperty(livello, "visibility", visibile);
+}
+
+function applicaVisibilitaAnomalie() {
+  mostraLivelli(["anomalie", "anomalie-bordo"], mostraAnomalie, anomalieVolo.length);
+}
+
+function applicaVisibilitaIncendi() {
+  mostraLivelli(["incendi", "incendi-alone"], mostraIncendi, incendiVolo.length);
+}
+
+function aggiornaPunto() {
+  if (!volo3d || !volo) return;
+  const punto = puntoAPosizione(volo, posizioneCorrente);
+  mappa.getSource("punto").setData(geojsonPunto(punto));
+  // La quota non è nelle coordinate: va passata ai due strati del punto.
+  for (const livello of ["punto-bordo", "punto"]) {
+    mappa.setLayoutProperty(livello, "line-z-offset", punto[2]);
+  }
+}
+
+function aggiornaLetture() {
+  if (!volo) return;
+  const punto = volo.punti[indiceCorrente];
+  const quota = punto[2].toFixed(0);
+  const ora = volo.orari
+    ? new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Europe/Rome" })
+      .format(new Date(volo.orari[indiceCorrente]))
+    : "—";
+
+  valoreQuota.textContent = `${quota} m`;
+  valoreOra.textContent = ora;
+
+  // Il profilo è anche un cursore: chi lo usa da tastiera deve poter sentire dove si
+  // trova, quindi la posizione va tenuta aggiornata anche lì. La percentuale è quella
+  // della strada percorsa, la stessa che si legge sul grafico.
+  const percorsa = interpola(volo.distanza, posizioneCorrente);
+  const percento = volo.lunghezza > 0 ? Math.round((percorsa / volo.lunghezza) * 100) : 0;
+  profilo.setAttribute("aria-valuenow", String(percento));
+  profilo.setAttribute("aria-valuetext", ora === "—" ? `${percento}%` : `${ora}, ${quota} m`);
+}
+
+// Porta l'aereo in un punto qualunque della traccia, senza animazione. Con "conCamera"
+// la camera lo segue: si sta guardando un momento preciso del volo, e quel momento va
+// tenuto sotto gli occhi — zoom, inclinazione e rotazione restano quelli scelti
+// dall'utente. Il cambio di sfondo invece non deve toccare l'inquadratura.
+function portaA(posizione, conCamera) {
+  if (!volo || !volo3d) return;
+  posizioneCorrente = Math.min(volo.punti.length - 1, Math.max(0, posizione));
+  indiceCorrente = Math.min(volo.punti.length - 1, Math.round(posizioneCorrente));
+  aggiornaPunto();
+  aggiornaLetture();
+  disegnaProfilo();
+
+  if (!conCamera) return;
+  const punto = puntoAPosizione(volo, posizioneCorrente);
+  mappa.jumpTo({ center: [punto[0], punto[1]] });
+}
+
+function inquadraVolo() {
+  if (!volo3d || !volo) return;
+
+  const vertici = volo.punti.map(punto => [punto[0], punto[1]]);
+  // Con rilevazioni e segnalazioni in vista si inquadrano anche loro: parecchie
+  // stanno decine di chilometri fuori traccia e altrimenti resterebbero fuori
+  // schermo.
+  if (mostraAnomalie?.checked) {
+    for (const anomalia of anomalieVolo) vertici.push([anomalia.longitude, anomalia.latitude]);
+  }
+  if (mostraIncendi?.checked) {
+    for (const incendio of incendiVolo) vertici.push([incendio.longitude, incendio.latitude]);
+  }
+
+  const limiti = vertici.reduce(
+    (accumulatore, vertice) => accumulatore.extend(vertice),
+    new mapboxgl.LngLatBounds(vertici[0], vertici[0])
+  );
+
+  // Il pannello copre la sinistra: da quella parte va lasciato spazio. Su finestre
+  // strette 380 px non ci starebbero e l'inquadratura verrebbe rifiutata, quindi il
+  // margine si adatta alla larghezza della mappa.
+  const sinistra = Math.min(380, Math.round(mappa.getCanvas().clientWidth * 0.42));
+
+  mappa.fitBounds(limiti, {
+    padding: { top: 70, bottom: 70, left: sinistra, right: 70 },
+    duration: 1200
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Riproduzione: la camera segue il tracciato, con la prua rivolta al senso di marcia
+// ---------------------------------------------------------------------------
+function invertiRotta() {
+  const partito = riproduzione !== null;
+  riproduzione = partito ? null : { ultimo: performance.now(), percorso: 0 };
+  pulsanteVola.textContent = partito ? "Segui il volo" : "Metti in pausa";
+
+  if (!partito) {
+    // Se la camera sta ancora inquadrando il volo, l'inseguimento prende il comando
+    // da dove si trova: senza, le due animazioni si contendono la stessa camera.
+    mappa.stop();
+    // Solo lo zoom lo decide l'applicazione, una volta sola all'avvio, e anche lui
+    // ci arriva per gradi; inclinazione e rotazione restano quelle date dall'utente.
+    zoomInseguimento = Math.max(mappa.getZoom(), ZOOM_INSEGUIMENTO);
+    insegueRotta = true;
+    requestAnimationFrame(passo);
+  }
+}
+
+function passo(adesso) {
+  if (!riproduzione || !volo) return;
+
+  const trascorso = (adesso - riproduzione.ultimo) / 1000;
+  riproduzione.ultimo = adesso;
+
+  // Senza orari nel file si percorre la traccia in mezzo minuto, altrimenti si
+  // rispetta la durata reale del volo moltiplicata per la velocità scelta.
+  const durata = volo.durata > 0 ? volo.durata : 30;
+  riproduzione.percorso += (trascorso * Number(cursoreVelocita.value)) / durata;
+
+  if (riproduzione.percorso >= 1) {
+    riproduzione.percorso = 1;
+  }
+
+  posizioneCorrente = riproduzione.percorso * (volo.punti.length - 1);
+  indiceCorrente = Math.min(volo.punti.length - 1,
+    Math.round(posizioneCorrente));
+
+  aggiornaPunto();
+  aggiornaLetture();
+  disegnaProfilo();
+  // Durante un gesto sulla mappa la camera è dell'utente: l'inseguimento aspetta il
+  // rilascio e poi riprende da dove si trova.
+  if (!mappa.isMoving()) segui(trascorso);
+
+  if (riproduzione.percorso >= 1) {
+    riproduzione = null;
+    pulsanteVola.textContent = "Segui il volo";
+    return;
+  }
+  requestAnimationFrame(passo);
+}
+
+// Ogni fotogramma la camera copre una frazione della distanza che la separa
+// dall'aereo. La frazione dipende dal tempo trascorso, non dal numero di fotogrammi:
+// così il movimento è lo stesso a 60 e a 120 Hz, e non ha strappi quando i punti
+// della traccia (o la velocità di riproduzione) fanno passi lunghi.
+function segui(trascorso) {
+  const frazione = 1 - Math.exp(-trascorso / INSEGUIMENTO_SECONDI);
+  const centro = mappa.getCenter();
+  const punto = puntoAPosizione(volo, posizioneCorrente);
+  const camera = {
+    center: [
+      centro.lng + (punto[0] - centro.lng) * frazione,
+      centro.lat + (punto[1] - centro.lat) * frazione
+    ]
+  };
+
+  // La prua segue la rotta del volo finché l'utente non tocca la rotazione.
+  if (insegueRotta) {
+    const corrente = mappa.getBearing();
+    camera.bearing = corrente + scartoRotte(corrente, rottaAllaPosizione(posizioneCorrente)) * frazione;
+  }
+
+  // Lo zoom d'avvio ci arriva per gradi, poi non viene più toccato.
+  if (zoomInseguimento !== null) {
+    const zoom = mappa.getZoom() + (zoomInseguimento - mappa.getZoom()) * frazione;
+    camera.zoom = zoom;
+    if (Math.abs(zoom - zoomInseguimento) < 0.01) zoomInseguimento = null;
+  }
+
+  mappa.jumpTo(camera);
+}
+
+// Differenza fra due rotte nel verso più corto: senza, passando da 359° a 1° la
+// camera farebbe mezzo giro per arrivare dall'altra parte.
+function scartoRotte(da, a) {
+  return ((a - da + 540) % 360) - 180;
+}
+
+function rottaFra([lonA, latA], [lonB, latB]) {
+  const radianti = gradi => gradi * Math.PI / 180;
+  const dLon = radianti(lonB - lonA);
+  const y = Math.sin(dLon) * Math.cos(radianti(latB));
+  const x = Math.cos(radianti(latA)) * Math.sin(radianti(latB)) -
+    Math.sin(radianti(latA)) * Math.cos(radianti(latB)) * Math.cos(dLon);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+// ---------------------------------------------------------------------------
+// Profilo di quota
+// ---------------------------------------------------------------------------
+// Margini del disegno, in pixel CSS. Servono anche a capire dove si è cliccato: la
+// corrispondenza fra ascissa e distanza percorsa dev'essere la stessa nei due versi.
+const MARGINE_PROFILO = { sopra: 12, sotto: 16, lato: 8 };
+
+// Quanti pixel separano l'inizio del grafico dalla distanza percorsa indicata, e il
+// contrario: quanta strada corrisponde a un'ascissa.
+function ascissaProfilo(larghezza, distanza) {
+  return MARGINE_PROFILO.lato +
+    (distanza / volo.lunghezza) * (larghezza - MARGINE_PROFILO.lato * 2);
+}
+
+function distanzaDaAscissa(larghezza, ascissa) {
+  const utile = larghezza - MARGINE_PROFILO.lato * 2;
+  const frazione = Math.min(1, Math.max(0, (ascissa - MARGINE_PROFILO.lato) / utile));
+  return frazione * volo.lunghezza;
+}
+
+// La posizione lungo la traccia a una certa distanza percorsa: è l'inverso di
+// interpola(), che dato l'indice frazionario legge i valori allineati alla traccia.
+// Le distanze crescono sempre, quindi basta una ricerca binaria.
+function posizioneDaDistanza(distanza) {
+  const distanze = volo.distanza;
+  let basso = 0;
+  let alto = distanze.length - 1;
+  while (alto - basso > 1) {
+    const mezzo = (basso + alto) >> 1;
+    if (distanze[mezzo] <= distanza) basso = mezzo; else alto = mezzo;
+  }
+  const tratto = distanze[alto] - distanze[basso];
+  return tratto > 0 ? basso + (distanza - distanze[basso]) / tratto : basso;
+}
+
+function disegnaProfilo() {
+  // Si disegna in pixel CSS: il canvas viene ingrandito secondo la densità dello
+  // schermo, altrimenti testo e tratti risultano sfocati.
+  const densita = window.devicePixelRatio || 1;
+  const larghezza = profilo.clientWidth || 300;
+  const altezza = profilo.clientHeight || 74;
+  if (profilo.width !== Math.round(larghezza * densita)) {
+    profilo.width = Math.round(larghezza * densita);
+    profilo.height = Math.round(altezza * densita);
+  }
+
+  const contesto = profilo.getContext("2d");
+  contesto.setTransform(densita, 0, 0, densita, 0, 0);
+  contesto.clearRect(0, 0, larghezza, altezza);
+  if (!volo) return;
+
+  const margine = MARGINE_PROFILO;
+  const minima = Math.max(0, volo.quotaMinima - 40);
+  const massima = volo.quotaMassima + 40;
+  const asse = lunghezza => ascissaProfilo(larghezza, lunghezza);
+  const ordinata = quota => altezza - margine.sotto -
+    ((quota - minima) / (massima - minima)) * (altezza - margine.sopra - margine.sotto);
+
+  const traccia = () => {
+    contesto.beginPath();
+    volo.punti.forEach((punto, indice) => {
+      const x = asse(volo.distanza[indice]);
+      const y = ordinata(punto[2]);
+      if (indice === 0) contesto.moveTo(x, y); else contesto.lineTo(x, y);
+    });
+  };
+
+  traccia();
+  contesto.lineTo(asse(volo.lunghezza), altezza - margine.sotto);
+  contesto.lineTo(asse(0), altezza - margine.sotto);
+  contesto.closePath();
+  contesto.fillStyle = "#ffd40033";
+  contesto.fill();
+
+  traccia();
+  contesto.strokeStyle = "#c9a400";
+  contesto.lineWidth = 1.6;
+  contesto.stroke();
+
+  // Il punto in cui si trova l'aereo adesso. La riga segue la posizione
+  // frazionaria, così scorre di continuo invece di saltare da un punto all'altro.
+  const x = asse(interpola(volo.distanza, posizioneCorrente));
+  contesto.beginPath();
+  contesto.moveTo(x, margine.sopra - 8);
+  contesto.lineTo(x, altezza - margine.sotto);
+  contesto.strokeStyle = "#17202a";
+  contesto.lineWidth = 1.2;
+  contesto.stroke();
+
+  contesto.fillStyle = "#68737d";
+  contesto.font = "10px system-ui, sans-serif";
+  contesto.textBaseline = "top";
+  contesto.fillText(`${massima.toFixed(0)} m`, margine.lato, 2);
+  contesto.textBaseline = "bottom";
+  contesto.fillText("0 m", margine.lato, altezza - 3);
+  contesto.textAlign = "right";
+  contesto.fillText(`${(volo.lunghezza / 1000).toFixed(0)} km`, larghezza - margine.lato, altezza - 3);
+  contesto.textAlign = "left";
+}
+
+// ---------------------------------------------------------------------------
+// Trascinamento sul profilo: l'aereo si sposta dove si punta il dito o il mouse
+// ---------------------------------------------------------------------------
+let trascinoProfilo = false;
+
+// Ascissa del puntatore dentro il canvas, in pixel CSS.
+const ascissaDelPuntatore = evento => evento.clientX - profilo.getBoundingClientRect().left;
+
+// Sposta l'aereo nel punto della traccia che sta sotto l'ascissa, e ci porta la
+// camera: si sta guardando un momento preciso del volo, e quel momento va tenuto
+// sotto gli occhi.
+function trascinaProfiloA(ascissa) {
+  if (!volo || !volo3d) return;
+  portaA(posizioneDaDistanza(distanzaDaAscissa(profilo.clientWidth, ascissa)), true);
+}
+
+profilo.addEventListener("pointerdown", evento => {
+  if (!volo3d || !volo) return;
+  // Trascinando, la riproduzione si ferma: altrimenti i due movimenti si
+  // contenderebbero lo stesso aereo.
+  riproduzione = null;
+  pulsanteVola.textContent = "Segui il volo";
+  trascinoProfilo = true;
+  profilo.setPointerCapture(evento.pointerId);
+  trascinaProfiloA(ascissaDelPuntatore(evento));
+});
+
+profilo.addEventListener("pointermove", evento => {
+  if (trascinoProfilo) trascinaProfiloA(ascissaDelPuntatore(evento));
+});
+
+for (const fine of ["pointerup", "pointercancel"]) {
+  profilo.addEventListener(fine, evento => {
+    if (!trascinoProfilo) return;
+    trascinoProfilo = false;
+    profilo.releasePointerCapture(evento.pointerId);
+  });
+}
+
+// Da tastiera: le frecce spostano di un centesimo di strada, con le maiuscole di
+// mezzo; Inizio e Fine vanno ai due estremi.
+profilo.addEventListener("keydown", evento => {
+  if (!volo3d || !volo) return;
+  const passa = evento.shiftKey ? 5 : 1;
+  const passo = (volo.lunghezza * passa) / 100;
+  const percorsa = interpola(volo.distanza, posizioneCorrente);
+
+  if (evento.key === "ArrowLeft") portaA(posizioneDaDistanza(percorsa - passo), true);
+  else if (evento.key === "ArrowRight") portaA(posizioneDaDistanza(percorsa + passo), true);
+  else if (evento.key === "Home") portaA(0, true);
+  else if (evento.key === "End") portaA(volo.punti.length - 1, true);
+  else return;
+
+  evento.preventDefault();
+});
+
+// ---------------------------------------------------------------------------
+// Comandi
+// ---------------------------------------------------------------------------
+selettoreVolo.addEventListener("change", () => {
+  riproduzione = null;
+  pulsanteVola.textContent = "Segui il volo";
+  volo = voli.find(elemento => elemento.nome === selettoreVolo.value) ?? voli[0];
+  disegnaVolo();
+  inquadraVolo();
+});
+
+cursoreEsagerazione.addEventListener("input", () => {
+  valoreEsagerazione.textContent = Number(cursoreEsagerazione.value).toFixed(1).replace(".", ",");
+  if (mappa?.getTerrain()) {
+    mappa.setTerrain({ source: "terreno", exaggeration: Number(cursoreEsagerazione.value) });
+  }
+});
+
+cursoreVelocita.addEventListener("input", () => {
+  valoreVelocita.textContent = cursoreVelocita.value;
+});
+
+mostraAnomalie.addEventListener("change", () => {
+  applicaVisibilitaAnomalie();
+  // Accendendo o spegnendo i segni cambia anche cosa vale la pena inquadrare.
+  inquadraVolo();
+});
+
+mostraIncendi.addEventListener("change", () => {
+  applicaVisibilitaIncendi();
+  inquadraVolo();
+});
+
+// Passa da uno sfondo all'altro. Sorgenti e livelli se ne vanno con lo stile
+// vecchio, quindi la mappa si mette in attesa: finché "style.load" non li rimette,
+// nessuno la tocca (i disegni controllano "volo3d").
+function cambiaSfondo(nome) {
+  if (nome === sfondo || !volo3d) return;
+
+  sfondo = nome;
+  aggiornaComandoSfondo();
+  posizioneDaRiprendere = posizioneCorrente;
+  volo3d = false;
+  popupAperto?.remove();
+  popupAperto = null;
+  // La riproduzione si ferma: mentre la traccia non c'è non avrebbe dove andare, e
+  // riprenderla in corsa la farebbe saltare.
+  riproduzione = null;
+  pulsanteVola.textContent = "Segui il volo";
+
+  mappa.setStyle(SFONDI[sfondo].stile);
+}
+
+// Il bottone in risalto è quello in uso.
+function aggiornaComandoSfondo() {
+  for (const [nome, pulsante] of [["satellite", pulsanteSatellite], ["stradale", pulsanteStradale]]) {
+    const inUso = nome === sfondo;
+    pulsante.classList.toggle("attivo", inUso);
+    pulsante.setAttribute("aria-pressed", String(inUso));
+  }
+}
+
+pulsanteSatellite.addEventListener("click", () => cambiaSfondo("satellite"));
+pulsanteStradale.addEventListener("click", () => cambiaSfondo("stradale"));
+
+pulsanteVola.addEventListener("click", invertiRotta);
+pulsanteInquadra.addEventListener("click", inquadraVolo);
+
+// ---------------------------------------------------------------------------
+// Avvio
+// ---------------------------------------------------------------------------
+// I valori di partenza dei cursori e dello sfondo arrivano dalle costanti: il markup
+// non deve poterle contraddire.
+function allineaComandi() {
+  cursoreEsagerazione.value = ESAGERAZIONE_INIZIALE;
+  valoreEsagerazione.textContent = Number(cursoreEsagerazione.value).toFixed(1).replace(".", ",");
+  valoreVelocita.textContent = cursoreVelocita.value;
+  aggiornaComandoSfondo();
+}
+
+// La chiave arriva da "./config.json", che genera-config.mjs ricava da .env. Se il
+// file manca si torna stringa vuota: è avvia() a spiegare cosa fare.
+async function leggiToken() {
+  try {
+    const risposta = await fetch("./config.json");
+    if (!risposta.ok) return "";
+    const letto = await risposta.json();
+    return typeof letto.MAPBOX_TOKEN === "string" ? letto.MAPBOX_TOKEN.trim() : "";
+  } catch (errore) {
+    console.warn(`config.json non leggibile (${errore.message}): manca la chiave Mapbox?`);
+    return "";
+  }
+}
+
+async function avvia() {
+  tokenMapbox = await leggiToken();
+  if (!tokenMapbox) {
+    mostraAvviso(avvisoToken,
+      "Manca la chiave Mapbox: copia .env.example in .env, scrivi lì la tua chiave " +
+      "pubblica e lancia «node genera-config.mjs», poi ricarica.");
+    return;
+  }
+
+  allineaComandi();
+  mapboxgl.accessToken = tokenMapbox;
+  avviaMappa();
+
+  try {
+    // Tracciati, rilevazioni e segnalazioni si scaricano insieme: sono indipendenti,
+    // e i due archivi non sono indispensabili (se mancano, la pagina funziona lo
+    // stesso).
+    const [letti, archivioAnomalie, archivioIncendi] =
+      await Promise.all([caricaVoli(), caricaAnomalie(), caricaIncendi()]);
+    voli = letti;
+    anomalie = archivioAnomalie;
+    incendi = archivioIncendi;
+  } catch (errore) {
+    mostraAvviso(avvisoErrore, `Non riesco a leggere i KML: ${errore.message}`);
+    return;
+  }
+
+  if (!voli.length) {
+    mostraAvviso(avvisoErrore, `Nessun volo leggibile in ${CARTELLA_KML}.`);
+    return;
+  }
+
+  selettoreVolo.replaceChildren(...voli.map(elemento => {
+    const opzione = document.createElement("option");
+    opzione.value = elemento.nome;
+    opzione.textContent = `${elemento.data} · ${(elemento.lunghezza / 1000).toFixed(0)} km`;
+    return opzione;
+  }));
+
+  volo = voli[0];
+  disegnaVolo();
+  inquadraVolo();
+  window.voli = voli;
+  window.volo = volo;
+}
+
+avvia();
+</script>
+</body>
+</html>

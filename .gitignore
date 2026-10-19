@@ -1,0 +1,7 @@
+# Segreti e derivati: il token Mapbox vive in ".env", e "config.json" è il file che
+# ne ricava genera-config.mjs. Nessuno dei due deve finire su GitHub.
+.env
+config.json
+
+# Roba di macOS
+.DS_Store
